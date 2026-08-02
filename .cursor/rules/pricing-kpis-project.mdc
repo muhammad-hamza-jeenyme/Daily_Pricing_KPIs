@@ -1,0 +1,15 @@
+---
+description: Core context for Jeeny Daily Pricing KPIs alert project
+alwaysApply: true
+---
+
+# Daily Pricing KPIs (Jeeny)
+
+- Product: Jeeny ride-hailing — daily Pricing KPI Slack alerts via Cloud Agent.
+- Schedule: Snowflake queries at **11:30 AM PKT**; analyse then post major shift / alert / warning.
+- Comparisons: **DoD**, **WoW**, **MoM = yesterday vs 28 days before**.
+- Integrations: Snowflake MCP + Slack MCP already attached.
+- First priority: document **how pricing works** before locking SQL/thresholds.
+- Canonical memory: `memory/PROJECT_CONTEXT.md`. Specs live in `docs/`.
+- When user shares pricing facts, update `docs/` + `memory/PROJECT_CONTEXT.md` in the same session.
+- Never invent Snowflake schemas, KPI formulas, or alert thresholds — mark TBD.

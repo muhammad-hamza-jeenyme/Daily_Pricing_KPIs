@@ -1,0 +1,11 @@
+.DS_Store
+Thumbs.db
+.env
+.env.*
+*.local
+.cursor/mcp.json
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
