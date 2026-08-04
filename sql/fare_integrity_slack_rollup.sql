@@ -1,7 +1,7 @@
 -- Fare integrity rollup for Slack (v1)
 -- Watchlist cities only: RUH, JED, MAD, DMM, MEC, AMM, IRB, ZRQ
--- Outputs yesterday KPIs with DoD, WoW, MoM, and vs prior-7d average
--- Major shift flag: yesterday_value > avg(prior 7 complete days)
+-- Outputs yesterday KPIs with DoD, WoW, MoM, and vs prior-14d average
+-- Watch flag: yesterday_value > avg(prior 14 complete days)
 -- Spec: docs/alert-rules.md
 
 WITH params AS (
@@ -10,8 +10,8 @@ WITH params AS (
         DATEADD('day', -2, CURRENT_DATE()) AS dod_date,
         DATEADD('day', -8, CURRENT_DATE()) AS wow_date,
         DATEADD('day', -29, CURRENT_DATE()) AS mom_date,
-        DATEADD('day', -8, CURRENT_DATE()) AS avg7_start,  -- yesterday-7
-        DATEADD('day', -2, CURRENT_DATE()) AS avg7_end     -- yesterday-1
+        DATEADD('day', -15, CURRENT_DATE()) AS avg14_start,  -- yesterday-14
+        DATEADD('day', -2, CURRENT_DATE()) AS avg14_end      -- yesterday-1
 ),
 
 BaseData AS (
@@ -116,6 +116,8 @@ DailyArea AS (
             AS pct_increase_pricing,
         ROUND(100.0 * SUM(IFF(issue_type = 'decrease_pricing', 1, 0)) / NULLIF(COUNT(*), 0), 4)
             AS pct_decrease_pricing,
+        ROUND(100.0 * SUM(IFF(issue_type = 'increase_non_issue', 1, 0)) / NULLIF(COUNT(*), 0), 4)
+            AS pct_increase_non_issue,
         ROUND(100.0 * SUM(IFF(issue_type = 'rounding', 1, 0)) / NULLIF(COUNT(*), 0), 4)
             AS pct_rounding,
         ROUND(100.0 * SUM(IFF(upfrontscenario = 'withinB', 1, 0)) / NULLIF(COUNT(*), 0), 4)
@@ -137,6 +139,7 @@ DoD AS (
     SELECT d.area_code,
            d.pct_increase_pricing AS dod_pct_increase_pricing,
            d.pct_decrease_pricing AS dod_pct_decrease_pricing,
+           d.pct_increase_non_issue AS dod_pct_increase_non_issue,
            d.pct_withinB AS dod_pct_withinB,
            d.pct_beyondB AS dod_pct_beyondB,
            d.pct_rounding AS dod_pct_rounding,
@@ -151,6 +154,7 @@ WoW AS (
     SELECT d.area_code,
            d.pct_increase_pricing AS wow_pct_increase_pricing,
            d.pct_decrease_pricing AS wow_pct_decrease_pricing,
+           d.pct_increase_non_issue AS wow_pct_increase_non_issue,
            d.pct_withinB AS wow_pct_withinB,
            d.pct_beyondB AS wow_pct_beyondB,
            d.pct_rounding AS wow_pct_rounding,
@@ -165,6 +169,7 @@ MoM AS (
     SELECT d.area_code,
            d.pct_increase_pricing AS mom_pct_increase_pricing,
            d.pct_decrease_pricing AS mom_pct_decrease_pricing,
+           d.pct_increase_non_issue AS mom_pct_increase_non_issue,
            d.pct_withinB AS mom_pct_withinB,
            d.pct_beyondB AS mom_pct_beyondB,
            d.pct_rounding AS mom_pct_rounding,
@@ -175,19 +180,20 @@ MoM AS (
     WHERE d.createddate = p.mom_date
 ),
 
-Avg7 AS (
+Avg14 AS (
     SELECT
         d.area_code,
-        ROUND(AVG(d.pct_increase_pricing), 4) AS avg7_pct_increase_pricing,
-        ROUND(AVG(d.pct_decrease_pricing), 4) AS avg7_pct_decrease_pricing,
-        ROUND(AVG(d.pct_withinB), 4) AS avg7_pct_withinB,
-        ROUND(AVG(d.pct_beyondB), 4) AS avg7_pct_beyondB,
-        ROUND(AVG(d.pct_rounding), 4) AS avg7_pct_rounding,
-        ROUND(AVG(d.avg_fare_diff), 4) AS avg7_avg_fare_diff,
-        ROUND(AVG(d.ride_count), 2) AS avg7_ride_count
+        ROUND(AVG(d.pct_increase_pricing), 4) AS avg14_pct_increase_pricing,
+        ROUND(AVG(d.pct_decrease_pricing), 4) AS avg14_pct_decrease_pricing,
+        ROUND(AVG(d.pct_increase_non_issue), 4) AS avg14_pct_increase_non_issue,
+        ROUND(AVG(d.pct_withinB), 4) AS avg14_pct_withinB,
+        ROUND(AVG(d.pct_beyondB), 4) AS avg14_pct_beyondB,
+        ROUND(AVG(d.pct_rounding), 4) AS avg14_pct_rounding,
+        ROUND(AVG(d.avg_fare_diff), 4) AS avg14_avg_fare_diff,
+        ROUND(AVG(d.ride_count), 2) AS avg14_ride_count
     FROM DailyArea d
     CROSS JOIN params p
-    WHERE d.createddate BETWEEN p.avg7_start AND p.avg7_end
+    WHERE d.createddate BETWEEN p.avg14_start AND p.avg14_end
     GROUP BY 1
 )
 
@@ -198,6 +204,7 @@ SELECT
     y.ride_count,
     y.pct_increase_pricing,
     y.pct_decrease_pricing,
+    y.pct_increase_non_issue,
     y.pct_withinB,
     y.pct_beyondB,
     y.pct_rounding,
@@ -206,36 +213,45 @@ SELECT
     y.sum_pricing_residual,
     /* DoD deltas (pp for rates) */
     ROUND(y.pct_increase_pricing - d.dod_pct_increase_pricing, 4) AS dod_delta_pct_increase_pricing,
+    ROUND(y.pct_decrease_pricing - d.dod_pct_decrease_pricing, 4) AS dod_delta_pct_decrease_pricing,
+    ROUND(y.pct_increase_non_issue - d.dod_pct_increase_non_issue, 4) AS dod_delta_pct_increase_non_issue,
     ROUND(y.pct_withinB - d.dod_pct_withinB, 4) AS dod_delta_pct_withinB,
+    ROUND(y.pct_beyondB - d.dod_pct_beyondB, 4) AS dod_delta_pct_beyondB,
     ROUND(y.pct_rounding - d.dod_pct_rounding, 4) AS dod_delta_pct_rounding,
     ROUND(y.avg_fare_diff - d.dod_avg_fare_diff, 4) AS dod_delta_avg_fare_diff,
     /* WoW */
     ROUND(y.pct_increase_pricing - w.wow_pct_increase_pricing, 4) AS wow_delta_pct_increase_pricing,
+    ROUND(y.pct_decrease_pricing - w.wow_pct_decrease_pricing, 4) AS wow_delta_pct_decrease_pricing,
     ROUND(y.pct_withinB - w.wow_pct_withinB, 4) AS wow_delta_pct_withinB,
+    ROUND(y.pct_beyondB - w.wow_pct_beyondB, 4) AS wow_delta_pct_beyondB,
     ROUND(y.pct_rounding - w.wow_pct_rounding, 4) AS wow_delta_pct_rounding,
     ROUND(y.avg_fare_diff - w.wow_avg_fare_diff, 4) AS wow_delta_avg_fare_diff,
     /* MoM */
     ROUND(y.pct_increase_pricing - m.mom_pct_increase_pricing, 4) AS mom_delta_pct_increase_pricing,
+    ROUND(y.pct_decrease_pricing - m.mom_pct_decrease_pricing, 4) AS mom_delta_pct_decrease_pricing,
     ROUND(y.pct_withinB - m.mom_pct_withinB, 4) AS mom_delta_pct_withinB,
+    ROUND(y.pct_beyondB - m.mom_pct_beyondB, 4) AS mom_delta_pct_beyondB,
     ROUND(y.pct_rounding - m.mom_pct_rounding, 4) AS mom_delta_pct_rounding,
     ROUND(y.avg_fare_diff - m.mom_avg_fare_diff, 4) AS mom_delta_avg_fare_diff,
-    /* Prior 7d averages */
-    a.avg7_pct_increase_pricing,
-    a.avg7_pct_decrease_pricing,
-    a.avg7_pct_withinB,
-    a.avg7_pct_beyondB,
-    a.avg7_pct_rounding,
-    a.avg7_avg_fare_diff,
-    /* Major shift flags: yesterday > prior 7d avg */
-    IFF(y.pct_increase_pricing > a.avg7_pct_increase_pricing, TRUE, FALSE) AS major_shift_pct_increase_pricing,
-    IFF(y.pct_decrease_pricing > a.avg7_pct_decrease_pricing, TRUE, FALSE) AS major_shift_pct_decrease_pricing,
-    IFF(y.pct_withinB > a.avg7_pct_withinB, TRUE, FALSE) AS major_shift_pct_withinB,
-    IFF(y.pct_beyondB > a.avg7_pct_beyondB, TRUE, FALSE) AS major_shift_pct_beyondB,
-    IFF(y.pct_rounding > a.avg7_pct_rounding, TRUE, FALSE) AS major_shift_pct_rounding,
-    IFF(y.avg_fare_diff > a.avg7_avg_fare_diff, TRUE, FALSE) AS major_shift_avg_fare_diff
+    /* Prior 14d averages */
+    a.avg14_pct_increase_pricing,
+    a.avg14_pct_decrease_pricing,
+    a.avg14_pct_increase_non_issue,
+    a.avg14_pct_withinB,
+    a.avg14_pct_beyondB,
+    a.avg14_pct_rounding,
+    a.avg14_avg_fare_diff,
+    /* Watch flags: yesterday > prior 14d avg */
+    IFF(y.pct_increase_pricing > a.avg14_pct_increase_pricing, TRUE, FALSE) AS watch_pct_increase_pricing,
+    IFF(y.pct_decrease_pricing > a.avg14_pct_decrease_pricing, TRUE, FALSE) AS watch_pct_decrease_pricing,
+    IFF(y.pct_increase_non_issue > a.avg14_pct_increase_non_issue, TRUE, FALSE) AS watch_pct_increase_non_issue,
+    IFF(y.pct_withinB > a.avg14_pct_withinB, TRUE, FALSE) AS watch_pct_withinB,
+    IFF(y.pct_beyondB > a.avg14_pct_beyondB, TRUE, FALSE) AS watch_pct_beyondB,
+    IFF(y.pct_rounding > a.avg14_pct_rounding, TRUE, FALSE) AS watch_pct_rounding,
+    IFF(y.avg_fare_diff > a.avg14_avg_fare_diff, TRUE, FALSE) AS watch_avg_fare_diff
 FROM Yesterday y
 LEFT JOIN DoD d ON y.area_code = d.area_code
 LEFT JOIN WoW w ON y.area_code = w.area_code
 LEFT JOIN MoM m ON y.area_code = m.area_code
-LEFT JOIN Avg7 a ON y.area_code = a.area_code
+LEFT JOIN Avg14 a ON y.area_code = a.area_code
 ORDER BY y.country, y.ride_count DESC;
