@@ -1,62 +1,51 @@
-# Daily Pricing KPIs — Jeeny Alert System
+# Daily Pricing KPIs — Jeeny Fare Integrity Tracker
 
-Slack-based daily digest and alert bot for Jeeny Pricing KPIs.
+Slack-oriented daily digest for Jeeny **Pricing fare integrity** (PriceCheck shown vs final charged fare under upfront pricing).
 
-A Cursor Cloud Agent runs Snowflake queries every day at **11:30 AM PKT**, analyses Day-over-Day (DoD), Week-over-Week (WoW), and Month-over-Month (MoM) movements, and posts a report to Slack when there is a major shift, alert, or warning.
+A Cursor Cloud Agent will run Snowflake at **11:30 AM PKT**, analyse **DoD / WoW / MoM** (MoM = yesterday vs 28 days prior), and alert on major shifts.
 
-## Goals
+## v1 scope
 
-1. **Understand pricing** — document how Jeeny pricing works (structure, levers, KPIs).
-2. **Automate monitoring** — daily Snowflake → analysis → Slack alerts.
-3. **Surface risk early** — flag material DoD / WoW / MoM changes vs baselines.
+- Universe: boarded rides, destination known (`ORIGINALESTIMATEFARE IS NOT NULL`), countries **SA + JO**
+- Compare: PriceCheck shown vs Receipts normalized (discount add-back)
+- Classify: `matched` | `rounding` | `increase_non_issue` | `increase_pricing` | `decrease_pricing`
+- Split by upfront scenario: `withinA` | `withinB` | `beyondB` (Snowflake casing)
+- Digest grain: **day × area_code × upfrontscenario × issue_type**, last **29** complete days
 
-## Comparison windows
+## Run this query
 
-| Label | Meaning |
-|-------|---------|
-| **DoD** | Yesterday vs the day before (or agreed prior day baseline) |
-| **WoW** | Yesterday vs the same weekday 7 days earlier |
-| **MoM** | Yesterday vs **28 days before** (4-week lookback, as defined for this project) |
+Primary (daily / MCP): [`sql/fare_integrity_daily_digest.sql`](sql/fare_integrity_daily_digest.sql)
 
-> MoM here is explicitly **yesterday vs 28 days prior**, not calendar-month averages, unless pricing docs say otherwise later.
+Ride-level debug: [`tables schema/draft SQL.sql`](tables%20schema/draft%20SQL.sql)
+
+## Docs
+
+| Doc | Purpose |
+|-----|---------|
+| [`docs/pricing-structure.md`](docs/pricing-structure.md) | How upfront / PriceCheck / Receipts fare works |
+| [`docs/kpi-definitions.md`](docs/kpi-definitions.md) | KPI catalogue & issue taxonomy |
+| [`docs/data-sources.md`](docs/data-sources.md) | Snowflake objects |
+| [`docs/alert-rules.md`](docs/alert-rules.md) | Slack severity (thresholds TBD) |
+| [`docs/validation-run-2026-08-04.md`](docs/validation-run-2026-08-04.md) | First Snowflake MCP validation snapshot |
+| [`memory/PROJECT_CONTEXT.md`](memory/PROJECT_CONTEXT.md) | Agent memory |
+| [`AGENTS.md`](AGENTS.md) | Working agreements |
 
 ## Stack
 
 | Component | Role |
 |-----------|------|
-| **Snowflake** (MCP) | Source of truth for Pricing KPI queries |
-| **Slack** (MCP) | Channel delivery via bot |
-| **Cursor Cloud Agent** | Scheduled run at 11:30 AM PKT; query, analyse, alert |
-| **This repo** | Specs, memory, query notes, alert rules, runbooks |
+| Snowflake MCP | `sql_exec_tool` |
+| Slack MCP | Channel alerts (next) |
+| Cloud Agent | 11:30 AM PKT schedule (next) |
 
-## Repo layout
+## Status
 
-```
-docs/
-  pricing-structure.md    # How pricing works (to be filled)
-  kpi-definitions.md      # KPI defs, formulas, owners
-  alert-rules.md          # Thresholds: major shift / alert / warning
-  data-sources.md         # Snowflake tables, grains, freshness
-memory/
-  PROJECT_CONTEXT.md      # Durable project memory for agents
-.cursor/rules/            # Always-on Cursor rules for this repo
-automations/              # Cloud agent / schedule notes (later)
-sql/                      # Snowflake query drafts (later)
-```
+- [x] Pricing structure documented
+- [x] Fare-integrity SQL (aggregate + ride-level)
+- [x] Snowflake MCP validation (2026-08-04)
+- [ ] DoD/WoW/MoM rollup query + Slack alert thresholds
+- [ ] Cloud Agent automation live
 
-## Current status
+## Repo
 
-- [x] Project scaffold and memory
-- [ ] Pricing structure documented (awaiting SME input)
-- [ ] KPI catalogue and thresholds agreed
-- [ ] Snowflake queries validated
-- [ ] Slack channel + bot message format
-- [ ] Cloud Agent schedule (11:30 AM PKT) live
-
-## Next input needed
-
-Pricing structure details from the team (how pricing works, levers, KPI definitions, and which tables/metrics matter).
-
-## Related
-
-- GitHub: https://github.com/muhammad-hamza-jeenyme/Daily_Pricing_KPIs
+https://github.com/muhammad-hamza-jeenyme/Daily_Pricing_KPIs

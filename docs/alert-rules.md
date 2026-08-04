@@ -1,36 +1,35 @@
 # Alert rules — severity & thresholds
 
-Status: **TBD** — agree after KPI catalogue exists.
+Status: **Draft** — wire after DoD/WoW/MoM rollup on digest.
 
 ## Severity levels
 
 | Level | Intent | Slack behaviour (proposed) |
 |-------|--------|----------------------------|
-| **Warning** | Soft deviation; watch | Include in daily digest, lower urgency |
-| **Alert** | Actionable pricing issue | Highlight in digest; tag owners if agreed |
-| **Major shift** | Large / unusual movement | Top of digest; strong callout |
+| **Warning** | Soft deviation; watch | Include in daily digest |
+| **Alert** | Actionable pricing issue | Highlight; tag owners if agreed |
+| **Major shift** | Large / unusual movement | Top of digest |
 
-Exact % / absolute thresholds per KPI: **TBD**.
+## Candidate metrics (from validation 2026-08-04)
+
+Thresholds TBD — start from yesterday vs −1d / −7d / −28d on:
+
+- `% increase_pricing` by area
+- `% withinB` by area
+- `avg_fare_diff` / `sum_residual` for `increase_pricing`
+- `rounding` rate (bug watch)
+- `scaled_distance_rides` by area (spoofing watch)
+- surge / PD mismatch counts
 
 ## Evaluation logic (proposed)
 
-For each KPI on yesterday:
-
-1. Compute DoD, WoW, MoM (MoM = vs 28 days prior).
-2. Classify each window against thresholds.
-3. Roll up to max severity for that KPI.
-4. Post digest when any KPI ≥ Warning (or always post daily summary — product decision TBD).
-
-## Quiet / suppress rules (TBD)
-
-- Holidays / known events
-- Incomplete data / late Snowflake freshness
-- Cities with volume below minimum sample size
+1. Run `sql/fare_integrity_daily_digest.sql`
+2. Pivot yesterday vs DoD/WoW/MoM baselines
+3. Classify severity per metric/area
+4. Post Slack digest
 
 ## Ownership
 
-| Severity | Notify | Escalate |
-|----------|--------|----------|
-| Warning | Pricing channel | — |
-| Alert | Pricing channel + owner | TBD |
-| Major shift | Pricing channel + owner | TBD |
+| Severity | Notify |
+|----------|--------|
+| Warning / Alert / Major shift | Pricing Slack channel (TBD) |

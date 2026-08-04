@@ -2,32 +2,25 @@
 
 ## Before any work
 
-1. Read `memory/PROJECT_CONTEXT.md`.
-2. Read relevant files under `docs/` (especially `pricing-structure.md` and `kpi-definitions.md`).
-3. Do not invent pricing mechanics, Snowflake objects, or alert thresholds.
+1. Read `memory/PROJECT_CONTEXT.md`
+2. Read `docs/pricing-structure.md` and `docs/kpi-definitions.md`
+3. Do not invent fare formulas; ask if unclear
 
 ## Mission
 
-Help Jeeny Pricing monitor daily KPIs via Snowflake analysis and Slack alerts (DoD, WoW, MoM = vs 28 days prior), after first documenting how pricing works.
+Jeeny fare-integrity tracker (v1): PriceCheck shown vs Receipts normalized; classify issue types; split by upfront scenario; digest for Slack DoD/WoW/MoM.
+
+## Canonical SQL
+
+- Daily aggregate: `sql/fare_integrity_daily_digest.sql`
+- Ride-level debug: `tables schema/draft SQL.sql`
+- Last MCP validation: `docs/validation-run-2026-08-04.md`
 
 ## Tools
 
-- **Snowflake MCP**: explore and validate queries once table guidance exists.
-- **Slack MCP**: send digests/alerts only when channel + format are agreed.
-- **Cloud Agent**: scheduled daily at 11:30 AM PKT (config TBD in `automations/`).
+- Snowflake MCP (`sql_exec_tool`) — prefer aggregate digests (token-efficient)
+- Slack MCP — after alert thresholds agreed
 
-## When the user shares new pricing context
+## When user shares new facts
 
-Update in the same session:
-
-1. `docs/pricing-structure.md` — mechanics
-2. `docs/kpi-definitions.md` — metrics
-3. `docs/data-sources.md` — tables/queries if mentioned
-4. `docs/alert-rules.md` — thresholds if mentioned
-5. `memory/PROJECT_CONTEXT.md` — confirmed facts + open items
-
-## Output preferences
-
-- Prefer concise, actionable digests for Slack.
-- Flag TBDs explicitly.
-- Keep GitHub repo and local docs in sync when asked to commit/push.
+Update `docs/pricing-structure.md`, `docs/kpi-definitions.md`, `docs/data-sources.md`, and `memory/PROJECT_CONTEXT.md` in the same session.

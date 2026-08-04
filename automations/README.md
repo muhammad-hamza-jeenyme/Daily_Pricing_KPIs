@@ -6,15 +6,10 @@
 |------|-------|
 | Cadence | Daily |
 | Time | **11:30 AM PKT** (UTC+5 → 06:30 UTC) |
-| Job | Query Snowflake → analyse DoD/WoW/MoM → Slack digest/alerts |
+| Job | Run `sql/fare_integrity_daily_digest.sql` → DoD/WoW/MoM → Slack |
 
 ## Status
 
-Automation config not yet created. Will add Cursor Cloud Agent / automation definition here once pricing KPIs and queries are agreed.
-
-## Expected inputs
-
-- Validated SQL under `sql/`
-- Thresholds from `docs/alert-rules.md`
-- Slack channel + bot target
-- Snowflake MCP credentials available to the Cloud Agent
+- SQL validated on Snowflake MCP (2026-08-04)
+- Automation config not yet created
+- Next: schedule + Slack message template + alert thresholds (`docs/alert-rules.md`)
