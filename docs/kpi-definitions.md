@@ -9,8 +9,9 @@ Status: **v1 fare-integrity** locked 2026-08-03.
 | **DoD** | Yesterday vs day before |
 | **WoW** | Yesterday vs 7 days earlier |
 | **MoM** | Yesterday vs **28 days before** |
+| **vs 14d avg** | Yesterday vs average of prior 14 complete days (`yesterday-14` … `yesterday-1`) |
 
-`createddate` is Saudi calendar date. Agent runs 11:30 AM PKT. Digest window = last 29 complete days (`createddate < CURRENT_DATE`).
+`createddate` is Saudi calendar date. Agent runs 11:30 AM PKT. Digest window = last 29 complete days (`createddate < CURRENT_DATE`). Watch = KPI above prior 14d average (see `docs/alert-rules.md`).
 
 ## v1 catalogue — fare integrity
 

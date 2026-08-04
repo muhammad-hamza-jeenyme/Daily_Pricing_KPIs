@@ -1,14 +1,15 @@
 # Alert rules — severity & thresholds
 
-Status: **v1 decisions locked** (2026-08-04).
+Status: **v1 decisions locked** (2026-08-04; watch window updated to 14d).
 
 ## Slack
 
 | Item | Value |
 |------|-------|
 | Channel ID | `C0BMWLMR03T` |
-| Cadence | Daily report + major-shift callouts |
+| Cadence | Daily report + watch callouts |
 | Runner | **Cursor Cloud Agent / Automation** (must not depend on laptop) |
+| Detailed report | Channel **Canvas** (city × KPI table with DoD/WoW/MoM) |
 
 ## In-scope cities (major markets)
 
@@ -23,7 +24,7 @@ Only these 8 areas appear in Slack alerts / daily report (full digest SQL may st
 
 ## KPIs monitored (per area, yesterday)
 
-Rates / levels derived from `sql/fare_integrity_daily_digest.sql`:
+Rates / levels derived from `sql/fare_integrity_slack_rollup.sql`:
 
 | KPI | Definition |
 |-----|------------|
@@ -33,7 +34,7 @@ Rates / levels derived from `sql/fare_integrity_daily_digest.sql`:
 | `pct_beyondB` | beyondB rides / total rides |
 | `pct_rounding` | rounding rides / total rides |
 | `pct_increase_non_issue` | increase_non_issue / total |
-| `avg_fare_diff` | avg fare_diff (all issue types or pricing-only — report both if useful) |
+| `avg_fare_diff` | avg fare_diff |
 | `scaled_distance_rides` | count where scaled distance used |
 
 ## Comparisons
@@ -43,29 +44,30 @@ Rates / levels derived from `sql/fare_integrity_daily_digest.sql`:
 | **DoD** | Yesterday vs day before |
 | **WoW** | Yesterday vs 7 days earlier |
 | **MoM** | Yesterday vs **28 days** earlier |
-| **vs 7d avg** | Yesterday vs **average of the prior 7 complete days** (`yesterday-7` … `yesterday-1`) |
+| **vs 14d avg** | Yesterday vs **average of the prior 14 complete days** (`yesterday-14` … `yesterday-1`) |
 
-## Major shift rule (v1)
+## Watch rule (v1)
 
-Flag **major shift** for an area + KPI when:
+Flag **watch** for an area + KPI when:
 
-`yesterday_value > avg(prior_7_complete_days)`
+`yesterday_value > avg(prior_14_complete_days)`
 
-Slack must name the **Area_Code**, KPI, yesterday value, 7d avg, and optionally DoD/WoW/MoM deltas.
+Slack must name the **Area_Code**, KPI, yesterday value, 14d avg, and optionally DoD/WoW/MoM deltas.
 
-> No extra % buffer yet — any increase above the 7d average counts. Tighten later if noisy.
+> No extra % buffer yet — any increase above the 14d average counts. Tighten later if noisy.
 
-## Message shape (proposed)
+## Message shape
 
 1. **Daily report** — always for the 8 cities: totals + issue mix + scenario mix + DoD/WoW/MoM on key rates.
-2. **Major shifts** — bullet list of area × KPI where yesterday > 7d avg (and show WoW/MoM if also elevated).
+2. **Watch** — bullet list of area × KPI where yesterday > 14d avg (and show WoW/MoM if also elevated).
+3. **Canvas** — detailed city × KPI table in the channel Canvas section so members can open the full report without scrolling the alert.
 
 ## Severity (roll-up)
 
 | Level | When |
 |-------|------|
 | Daily digest | Always post |
-| Major shift | Any KPI above 7d avg for a watchlist city |
+| Watch | Any KPI above 14d avg for a watchlist city |
 | Alert / Warning tiers | TBD once we see noise (e.g. only if also WoW ↑ and volume ≥ N) |
 
 ## Ownership
