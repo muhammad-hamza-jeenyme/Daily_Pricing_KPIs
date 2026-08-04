@@ -9,7 +9,7 @@ The digest must run **even when your laptop is off**. A local Cursor chat / lapt
 | Item | Value |
 |------|-------|
 | Cadence | Daily |
-| Time | **11:30 AM PKT** → cron `0 6 * * *` (06:00 UTC; confirm editor timezone display) |
+| Time | **11:30 AM PKT** → cron `30 6 * * *` (06:30 UTC; confirm editor timezone display) |
 | Job | Run fare-integrity digest → DoD/WoW/MoM + vs 7d avg → Slack `C0BMWLMR03T` (+ optional canvas) |
 
 ## Watchlist cities
