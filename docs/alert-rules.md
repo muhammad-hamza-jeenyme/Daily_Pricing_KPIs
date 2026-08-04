@@ -1,35 +1,73 @@
 # Alert rules — severity & thresholds
 
-Status: **Draft** — wire after DoD/WoW/MoM rollup on digest.
+Status: **v1 decisions locked** (2026-08-04).
 
-## Severity levels
+## Slack
 
-| Level | Intent | Slack behaviour (proposed) |
-|-------|--------|----------------------------|
-| **Warning** | Soft deviation; watch | Include in daily digest |
-| **Alert** | Actionable pricing issue | Highlight; tag owners if agreed |
-| **Major shift** | Large / unusual movement | Top of digest |
+| Item | Value |
+|------|-------|
+| Channel ID | `C0BMWLMR03T` |
+| Cadence | Daily report + major-shift callouts |
+| Runner | **Cursor Cloud Agent / Automation** (must not depend on laptop) |
 
-## Candidate metrics (from validation 2026-08-04)
+## In-scope cities (major markets)
 
-Thresholds TBD — start from yesterday vs −1d / −7d / −28d on:
+Fixed watchlist (top boarded volume):
 
-- `% increase_pricing` by area
-- `% withinB` by area
-- `avg_fare_diff` / `sum_residual` for `increase_pricing`
-- `rounding` rate (bug watch)
-- `scaled_distance_rides` by area (spoofing watch)
-- surge / PD mismatch counts
+| Country | Area codes |
+|---------|------------|
+| SA | `RUH`, `JED`, `MAD`, `DMM`, `MEC` |
+| JO | `AMM`, `IRB`, `ZRQ` |
 
-## Evaluation logic (proposed)
+Only these 8 areas appear in Slack alerts / daily report (full digest SQL may still compute all areas for diagnostics).
 
-1. Run `sql/fare_integrity_daily_digest.sql`
-2. Pivot yesterday vs DoD/WoW/MoM baselines
-3. Classify severity per metric/area
-4. Post Slack digest
+## KPIs monitored (per area, yesterday)
+
+Rates / levels derived from `sql/fare_integrity_daily_digest.sql`:
+
+| KPI | Definition |
+|-----|------------|
+| `pct_increase_pricing` | `increase_pricing` rides / total rides |
+| `pct_decrease_pricing` | `decrease_pricing` rides / total rides |
+| `pct_withinB` | withinB rides / total rides |
+| `pct_beyondB` | beyondB rides / total rides |
+| `pct_rounding` | rounding rides / total rides |
+| `pct_increase_non_issue` | increase_non_issue / total |
+| `avg_fare_diff` | avg fare_diff (all issue types or pricing-only — report both if useful) |
+| `scaled_distance_rides` | count where scaled distance used |
+
+## Comparisons
+
+| Window | Definition |
+|--------|------------|
+| **DoD** | Yesterday vs day before |
+| **WoW** | Yesterday vs 7 days earlier |
+| **MoM** | Yesterday vs **28 days** earlier |
+| **vs 7d avg** | Yesterday vs **average of the prior 7 complete days** (`yesterday-7` … `yesterday-1`) |
+
+## Major shift rule (v1)
+
+Flag **major shift** for an area + KPI when:
+
+`yesterday_value > avg(prior_7_complete_days)`
+
+Slack must name the **Area_Code**, KPI, yesterday value, 7d avg, and optionally DoD/WoW/MoM deltas.
+
+> No extra % buffer yet — any increase above the 7d average counts. Tighten later if noisy.
+
+## Message shape (proposed)
+
+1. **Daily report** — always for the 8 cities: totals + issue mix + scenario mix + DoD/WoW/MoM on key rates.
+2. **Major shifts** — bullet list of area × KPI where yesterday > 7d avg (and show WoW/MoM if also elevated).
+
+## Severity (roll-up)
+
+| Level | When |
+|-------|------|
+| Daily digest | Always post |
+| Major shift | Any KPI above 7d avg for a watchlist city |
+| Alert / Warning tiers | TBD once we see noise (e.g. only if also WoW ↑ and volume ≥ N) |
 
 ## Ownership
 
-| Severity | Notify |
-|----------|--------|
-| Warning / Alert / Major shift | Pricing Slack channel (TBD) |
+Pricing Slack channel `C0BMWLMR03T`.

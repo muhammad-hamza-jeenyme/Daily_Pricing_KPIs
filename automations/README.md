@@ -1,15 +1,29 @@
 # Cloud Agent automations
 
+## Why Cloud Agent
+
+The digest must run **even when your laptop is off**. A local Cursor chat / laptop cron cannot do that reliably. Use a **Cursor Cloud Automation** (scheduled Cloud Agent) with Snowflake + Slack access.
+
 ## Planned schedule
 
 | Item | Value |
 |------|-------|
 | Cadence | Daily |
-| Time | **11:30 AM PKT** (UTC+5 → 06:30 UTC) |
-| Job | Run `sql/fare_integrity_daily_digest.sql` → DoD/WoW/MoM → Slack |
+| Time | **11:30 AM PKT** → cron `0 6 * * *` (06:00 UTC; confirm editor timezone display) |
+| Job | Run fare-integrity digest → DoD/WoW/MoM + vs 7d avg → Slack `C0BMWLMR03T` (+ optional canvas) |
+
+## Watchlist cities
+
+`RUH`, `JED`, `MAD`, `DMM`, `MEC`, `AMM`, `IRB`, `ZRQ`
 
 ## Status
 
-- SQL validated on Snowflake MCP (2026-08-04)
-- Automation config not yet created
-- Next: schedule + Slack message template + alert thresholds (`docs/alert-rules.md`)
+- [x] Channel ID decided (`C0BMWLMR03T` only)
+- [x] Major-shift rule (yesterday > prior 7d avg)
+- [x] DoD/WoW/MoM rollup SQL: `sql/fare_integrity_slack_rollup.sql`
+- [x] Bot instructions: `automations/DAILY_SLACK_INSTRUCTIONS.md`
+- [ ] Cloud Automation created & enabled (Snowflake MCP must be selected for Cloud Agents)
+
+## Create automation
+
+Open Automations editor with draft: daily cron 11:30 AM PKT, Slack post only to `C0BMWLMR03T`, instructions from `automations/DAILY_SLACK_INSTRUCTIONS.md`. Select Snowflake MCP in the editor if not prefilled.

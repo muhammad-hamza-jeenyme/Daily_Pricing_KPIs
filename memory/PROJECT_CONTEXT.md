@@ -26,6 +26,16 @@ Fare-integrity tracker (v1). Cloud Agent **11:30 AM PKT**; SA+JO; digest **day �
 - Window: 2026-07-06 → 2026-08-03 (~5.18M rides)
 - Yesterday top `increase_pricing` areas: AMM, JED, RUH, …
 
+## Slack / automation (locked 2026-08-04)
+
+- Channel: `C0BMWLMR03T`
+- Cities: RUH, JED, MAD, DMM, MEC, AMM, IRB, ZRQ
+- Major shift: yesterday KPI > avg of prior 7 complete days; always name Area_Code
+- **Requires Cursor Cloud Agent** (laptop-independent)
+- Spec: `docs/alert-rules.md`
+
 ## Next
 
-DoD/WoW/MoM rollup + Slack thresholds + Cloud Agent schedule.
+1. Build DoD/WoW/MoM + 7d-avg rollup SQL (watchlist cities)
+2. Slack daily report + major-shift format (optional canvas)
+3. Create Cloud Automation @ 11:30 AM PKT
