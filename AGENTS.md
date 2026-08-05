@@ -13,13 +13,15 @@ Jeeny fare-integrity tracker (v1): PriceCheck shown vs Receipts normalized; clas
 ## Canonical SQL
 
 - Daily aggregate: `sql/fare_integrity_daily_digest.sql`
+- Slack rollup (alerts): `sql/fare_integrity_slack_rollup.sql`
 - Ride-level debug: `tables schema/draft SQL.sql`
 - Last MCP validation: `docs/validation-run-2026-08-04.md`
 
 ## Tools
 
-- Snowflake MCP (`sql_exec_tool`) — prefer aggregate digests (token-efficient)
-- Slack MCP — after alert thresholds agreed
+- Snowflake MCP (`sql_exec_tool`) — **required** for daily digests (prefer rollup SQL)
+- Slack post to `C0BMWLMR03T` only; detailed report in channel Canvas
+- Watch rule: yesterday KPI > prior 14d average
 
 ## When user shares new facts
 
