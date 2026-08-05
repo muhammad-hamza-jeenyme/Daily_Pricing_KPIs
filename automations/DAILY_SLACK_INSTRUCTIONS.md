@@ -6,11 +6,12 @@ Used by Cursor Cloud Automation. Post **only** to channel `C0BMWLMR03T`. Never l
 
 | Tool | Required | Purpose |
 |------|----------|---------|
-| Snowflake MCP (`sql_exec_tool`) | **Yes** | Run `sql/fare_integrity_slack_rollup.sql` |
+| Snowflake MCP (`sql_exec_tool`) | Preferred | Run `sql/fare_integrity_slack_rollup.sql` |
+| Snowflake SQL API via env PAT | Fallback | If MCP missing, run the same SQL with `SNOWFLAKE_*` secrets (`/api/v2/statements`) |
 | Slack post (`send_slack_message`) | **Yes** | Daily alert to `C0BMWLMR03T` |
 | Slack Canvas create/update | Preferred | Detailed report in channel Canvas |
 
-If Snowflake MCP is missing or fails, post a short failure notice to `C0BMWLMR03T` only. Do not invent KPI numbers.
+If both Snowflake MCP and SQL API fail, post a short failure notice to `C0BMWLMR03T` only. Do not invent KPI numbers.
 
 ## Every run (11:00 AM PKT / cron `0 6 * * *` UTC)
 
