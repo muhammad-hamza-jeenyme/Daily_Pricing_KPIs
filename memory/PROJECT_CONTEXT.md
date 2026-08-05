@@ -1,10 +1,10 @@
 # Project memory — Daily Pricing KPIs
 
-Last updated: 2026-08-04 (Snowflake digest validated + repo sync)
+Last updated: 2026-08-05 (14d watch rule + Canvas detail; live cron 11:00 AM PKT; Snowflake MCP required)
 
 ## Mission
 
-Fare-integrity tracker (v1). Cloud Agent **11:30 AM PKT**; SA+JO; digest **day × AREA_CODE × UPFRONTSCENARIO × issue_type**; **29** complete days; DoD/WoW/MoM (vs 28d prior).
+Fare-integrity tracker (v1). Cloud Agent **11:00 AM PKT**; SA+JO; digest **day × AREA_CODE × UPFRONTSCENARIO × issue_type**; **29** complete days; DoD/WoW/MoM (vs 28d prior).
 
 ## Locked compare
 
@@ -16,7 +16,8 @@ Fare-integrity tracker (v1). Cloud Agent **11:30 AM PKT**; SA+JO; digest **day �
 
 ## SQL
 
-- Aggregate: `sql/fare_integrity_daily_digest.sql` ← **run this**
+- Aggregate: `sql/fare_integrity_daily_digest.sql`
+- Slack rollup: `sql/fare_integrity_slack_rollup.sql` ← **run this for daily alerts**
 - Ride-level: `tables schema/draft SQL.sql`
 - Validation notes: `docs/validation-run-2026-08-04.md`
 
@@ -30,12 +31,13 @@ Fare-integrity tracker (v1). Cloud Agent **11:30 AM PKT**; SA+JO; digest **day �
 
 - Channel: `C0BMWLMR03T`
 - Cities: RUH, JED, MAD, DMM, MEC, AMM, IRB, ZRQ
-- Major shift: yesterday KPI > avg of prior 7 complete days; always name Area_Code
-- **Requires Cursor Cloud Agent** (laptop-independent)
+- Watch: yesterday KPI > avg of prior **14** complete days; always name Area_Code
+- Detailed report: channel **Canvas** (fallback: thread with full table)
+- Cron: **11:00 AM PKT** = `0 6 * * *` UTC (matches live automation trigger)
+- **Requires Snowflake MCP** on the Cloud Automation (without it, post failure notice only)
 - Spec: `docs/alert-rules.md`
 
 ## Next
 
-1. Build DoD/WoW/MoM + 7d-avg rollup SQL (watchlist cities)
-2. Slack daily report + major-shift format (optional canvas)
-3. Create Cloud Automation @ 11:30 AM PKT
+1. Attach Snowflake MCP to Cloud Automation and re-run daily digest
+2. Enable Slack Canvas create/update for detailed city report

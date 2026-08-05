@@ -2,7 +2,7 @@
 
 Slack-oriented daily digest for Jeeny **Pricing fare integrity** (PriceCheck shown vs final charged fare under upfront pricing).
 
-A Cursor Cloud Agent will run Snowflake at **11:30 AM PKT**, analyse **DoD / WoW / MoM** (MoM = yesterday vs 28 days prior), and alert on major shifts.
+A Cursor Cloud Agent will run Snowflake at **11:00 AM PKT**, analyse **DoD / WoW / MoM** (MoM = yesterday vs 28 days prior), and alert on watch KPIs (yesterday > prior 14d avg).
 
 ## v1 scope
 
@@ -25,7 +25,7 @@ Ride-level debug: [`tables schema/draft SQL.sql`](tables%20schema/draft%20SQL.sq
 | [`docs/pricing-structure.md`](docs/pricing-structure.md) | How upfront / PriceCheck / Receipts fare works |
 | [`docs/kpi-definitions.md`](docs/kpi-definitions.md) | KPI catalogue & issue taxonomy |
 | [`docs/data-sources.md`](docs/data-sources.md) | Snowflake objects |
-| [`docs/alert-rules.md`](docs/alert-rules.md) | Slack severity (thresholds TBD) |
+| [`docs/alert-rules.md`](docs/alert-rules.md) | Slack watch rule (vs 14d avg) + Canvas detail |
 | [`docs/validation-run-2026-08-04.md`](docs/validation-run-2026-08-04.md) | First Snowflake MCP validation snapshot |
 | [`memory/PROJECT_CONTEXT.md`](memory/PROJECT_CONTEXT.md) | Agent memory |
 | [`AGENTS.md`](AGENTS.md) | Working agreements |
@@ -36,15 +36,15 @@ Ride-level debug: [`tables schema/draft SQL.sql`](tables%20schema/draft%20SQL.sq
 |-----------|------|
 | Snowflake MCP | `sql_exec_tool` |
 | Slack MCP | Channel alerts (next) |
-| Cloud Agent | 11:30 AM PKT schedule (next) |
+| Cloud Agent | 11:00 AM PKT schedule (`0 6 * * *` UTC) |
 
 ## Status
 
 - [x] Pricing structure documented
 - [x] Fare-integrity SQL (aggregate + ride-level)
 - [x] Snowflake MCP validation (2026-08-04)
-- [ ] DoD/WoW/MoM rollup query + Slack alert thresholds
-- [ ] Cloud Agent automation live
+- [x] DoD/WoW/MoM rollup + 14d watch flags (`sql/fare_integrity_slack_rollup.sql`)
+- [ ] Cloud Agent automation live with Snowflake MCP + Canvas detail
 
 ## Repo
 
