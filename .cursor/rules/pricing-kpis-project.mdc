@@ -6,8 +6,9 @@ alwaysApply: true
 # Daily Pricing KPIs (Jeeny)
 
 - v1: fare-integrity digest (PriceCheck vs Receipts); scenarios withinA/withinB/beyondB.
-- Run SQL: `sql/fare_integrity_daily_digest.sql`. Schedule: **11:30 AM PKT**.
-- Comparisons: **DoD**, **WoW**, **MoM = yesterday vs 28 days before**.
+- Run Slack rollup: `sql/fare_integrity_slack_rollup.sql`. Schedule: **11:00 AM PKT** (`0 6 * * *` UTC).
+- Comparisons: **DoD**, **WoW**, **MoM = yesterday vs 28 days before**; watch = yesterday > prior **14d** avg.
+- Cities: SA RUH/JED/MAD/DMM/MEC, JO AMM/IRB/ZRQ. Detailed report in channel Canvas.
 - SA surcharge VAT ×1.15; JO ×1.0. issue_types: matched/rounding/increase_non_issue/increase_pricing/decrease_pricing.
 - Memory: `memory/PROJECT_CONTEXT.md`. Specs: `docs/`. Validation: `docs/validation-run-2026-08-04.md`.
 - Never invent formulas; update docs when SME facts change.
