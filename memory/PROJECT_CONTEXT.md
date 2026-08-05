@@ -1,6 +1,6 @@
 # Project memory — Daily Pricing KPIs
 
-Last updated: 2026-08-05 (14d watch rule + Canvas detail; live cron 11:00 AM PKT; Snowflake MCP required)
+Last updated: 2026-08-05 (14d watch rule + Canvas detail; live cron 11:00 AM PKT; Snowflake SQL API fallback)
 
 ## Mission
 
@@ -34,10 +34,17 @@ Fare-integrity tracker (v1). Cloud Agent **11:00 AM PKT**; SA+JO; digest **day �
 - Watch: yesterday KPI > avg of prior **14** complete days; always name Area_Code
 - Detailed report: channel **Canvas** (fallback: thread with full table)
 - Cron: **11:00 AM PKT** = `0 6 * * *` UTC (matches live automation trigger)
-- **Requires Snowflake MCP** on the Cloud Automation (without it, post failure notice only)
+- Prefer Snowflake MCP; if missing, run rollup via Snowflake SQL API using `SNOWFLAKE_*` PAT secrets
 - Spec: `docs/alert-rules.md`
+
+## Last successful Slack digest
+
+- Report date: **2026-08-04** (posted 2026-08-05 cron)
+- Path: Snowflake SQL API + `send_slack_message` to `C0BMWLMR03T`
+- Watch: 18 area×KPI flags (yesterday > prior 14d avg)
+- Detail: thread fallback (Canvas write still unavailable)
 
 ## Next
 
-1. Attach Snowflake MCP to Cloud Automation and re-run daily digest
+1. Prefer attaching Snowflake MCP (`sql_exec_tool`) for cleaner runs
 2. Enable Slack Canvas create/update for detailed city report
