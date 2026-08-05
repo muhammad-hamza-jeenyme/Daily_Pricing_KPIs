@@ -1,10 +1,10 @@
 # Project memory — Daily Pricing KPIs
 
-Last updated: 2026-08-04 (Snowflake digest validated + repo sync)
+Last updated: 2026-08-05 (14d watch + Pulsar webhook digest)
 
 ## Mission
 
-Fare-integrity tracker (v1). Cloud Agent **11:30 AM PKT**; SA+JO; digest **day × AREA_CODE × UPFRONTSCENARIO × issue_type**; **29** complete days; DoD/WoW/MoM (vs 28d prior).
+Fare-integrity tracker (v1). Cloud Agent **11:00 AM PKT**; SA+JO; digest **day × AREA_CODE × UPFRONTSCENARIO × issue_type**; **29** complete days; DoD/WoW/MoM (vs 28d prior); watch vs prior **14d** avg.
 
 ## Locked compare
 
@@ -16,7 +16,8 @@ Fare-integrity tracker (v1). Cloud Agent **11:30 AM PKT**; SA+JO; digest **day �
 
 ## SQL
 
-- Aggregate: `sql/fare_integrity_daily_digest.sql` ← **run this**
+- Aggregate: `sql/fare_integrity_daily_digest.sql`
+- Slack rollup: `sql/fare_integrity_slack_rollup.sql` ← **run this for daily alert**
 - Ride-level: `tables schema/draft SQL.sql`
 - Validation notes: `docs/validation-run-2026-08-04.md`
 
@@ -26,16 +27,17 @@ Fare-integrity tracker (v1). Cloud Agent **11:30 AM PKT**; SA+JO; digest **day �
 - Window: 2026-07-06 → 2026-08-03 (~5.18M rides)
 - Yesterday top `increase_pricing` areas: AMM, JED, RUH, …
 
-## Slack / automation (locked 2026-08-04)
+## Slack / automation (locked 2026-08-05)
 
-- Channel: `C0BMWLMR03T`
+- Channel: `#pricing-alerts` only (ID from `SLACK_CHANNEL_ID` secret)
 - Cities: RUH, JED, MAD, DMM, MEC, AMM, IRB, ZRQ
-- Major shift: yesterday KPI > avg of prior 7 complete days; always name Area_Code
-- **Requires Cursor Cloud Agent** (laptop-independent)
-- Spec: `docs/alert-rules.md`
+- Watch: yesterday KPI > avg of prior **14** complete days; always name Area_Code
+- Poster: **Pulsar** via `PULSAR_SLACK_WEBHOOK_URL` only (never Cursor Slack send)
+- Detailed report: channel Canvas (fallback: second Pulsar message)
+- Spec: `docs/alert-rules.md`, `automations/DAILY_SLACK_INSTRUCTIONS.md`
 
 ## Next
 
-1. Build DoD/WoW/MoM + 7d-avg rollup SQL (watchlist cities)
-2. Slack daily report + major-shift format (optional canvas)
-3. Create Cloud Automation @ 11:30 AM PKT
+1. Enable Slack Canvas write for detailed report
+2. Prefer Snowflake MCP; keep SQL API PAT fallback
+3. Tune watch noise (buffer / volume floor) after a few Pulsar digests
