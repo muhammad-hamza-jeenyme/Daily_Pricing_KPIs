@@ -12,7 +12,7 @@ Used by Cursor Cloud Automation. Post **only** to channel `C0BMWLMR03T`. Never l
 
 If Snowflake MCP is missing or fails, post a short failure notice to `C0BMWLMR03T` only. Do not invent KPI numbers.
 
-## Every run (11:30 AM PKT / cron `30 6 * * *` UTC)
+## Every run (11:00 AM PKT / cron `0 6 * * *` UTC)
 
 1. From repo `muhammad-hamza-jeenyme/Daily_Pricing_KPIs`, run Snowflake SQL in `sql/fare_integrity_slack_rollup.sql` (watchlist cities only).
 2. Summarize **yesterday** for: RUH, JED, MAD, DMM, MEC (SA) and AMM, IRB, ZRQ (JO).

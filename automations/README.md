@@ -9,7 +9,7 @@ The digest must run **even when your laptop is off**. A local Cursor chat / lapt
 | Item | Value |
 |------|-------|
 | Cadence | Daily |
-| Time | **11:30 AM PKT** → cron `30 6 * * *` (06:30 UTC; confirm editor timezone display) |
+| Time | **11:00 AM PKT** → cron `0 6 * * *` (06:00 UTC; confirm editor timezone display) |
 | Job | Run fare-integrity rollup → DoD/WoW/MoM + vs 14d avg → Slack `C0BMWLMR03T` + Canvas detail |
 
 ## Watchlist cities
@@ -30,7 +30,7 @@ JO: `AMM`, `IRB`, `ZRQ`
 ## Create / fix automation
 
 1. Open Automations editor for this job.
-2. Schedule: daily **11:30 AM PKT** (`30 6 * * *` UTC).
+2. Schedule: daily **11:00 AM PKT** (`0 6 * * *` UTC).
 3. Instructions: `automations/DAILY_SLACK_INSTRUCTIONS.md`.
 4. **Select Snowflake MCP** (`sql_exec_tool`) — required. Without it the agent can only post a failure notice.
 5. Slack destination must remain `#pricing-alerts` / `C0BMWLMR03T` only.

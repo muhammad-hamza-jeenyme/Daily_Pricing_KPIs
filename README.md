@@ -2,7 +2,7 @@
 
 Slack-oriented daily digest for Jeeny **Pricing fare integrity** (PriceCheck shown vs final charged fare under upfront pricing).
 
-A Cursor Cloud Agent will run Snowflake at **11:30 AM PKT**, analyse **DoD / WoW / MoM** (MoM = yesterday vs 28 days prior), and alert on major shifts.
+A Cursor Cloud Agent will run Snowflake at **11:00 AM PKT**, analyse **DoD / WoW / MoM** (MoM = yesterday vs 28 days prior), and alert on watch KPIs (yesterday > prior 14d avg).
 
 ## v1 scope
 
@@ -36,7 +36,7 @@ Ride-level debug: [`tables schema/draft SQL.sql`](tables%20schema/draft%20SQL.sq
 |-----------|------|
 | Snowflake MCP | `sql_exec_tool` |
 | Slack MCP | Channel alerts (next) |
-| Cloud Agent | 11:30 AM PKT schedule (next) |
+| Cloud Agent | 11:00 AM PKT schedule (`0 6 * * *` UTC) |
 
 ## Status
 
