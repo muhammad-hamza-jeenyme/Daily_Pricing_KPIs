@@ -28,14 +28,14 @@ Channel: **% fare increase only** (country + cities/Others). Watches detail: **C
 - Templates: `automations/SLACK_MESSAGE_TEMPLATE.md`, `automations/CANVAS_WATCH_TEMPLATE.md`
 - Cities SA: RUH, JED, MAD, DMM, MEC + Others | JO: AMM, IRB, ZRQ + Others
 - Major shift / Watch: yesterday > prior **7** complete days average
-- Canvas needs `PULSAR_SLACK_BOT_TOKEN` (missing as of 2026-08-06)
+- Canvas needs `PULSAR_SLACK_BOT_TOKEN` with **canvases:read + canvases:write** (token present 2026-08-06 but scopes insufficient)
 
-## Last cron run (2026-08-06)
+## Last cron run (2026-08-06, branch `cursor/pricing-fare-integrity-daily-abc6`)
 
 - report_date **2026-08-05**
 - Snowflake SQL API OK (MCP still not attached)
-- Pulsar short channel summary posted
-- Canvas skipped (no bot token); watches not dumped to channel
+- Pulsar short channel summary posted (HTTP 200)
+- Canvas update failed: bot token missing `canvases:read`/`canvases:write` (provided: chat:write, incoming-webhook); watches not dumped to channel
 
 ## Pulsar + Canvas (locked 2026-08-06)
 
