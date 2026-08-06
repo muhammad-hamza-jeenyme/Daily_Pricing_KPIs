@@ -24,7 +24,7 @@ The digest must run **even when your laptop is off**. A local Cursor chat / lapt
 - [x] Rollup SQL (Canvas watches): `sql/fare_integrity_slack_rollup.sql`
 - [x] Templates: `SLACK_MESSAGE_TEMPLATE.md`, `CANVAS_WATCH_TEMPLATE.md`
 - [x] Bot instructions: `automations/DAILY_SLACK_INSTRUCTIONS.md`
-- [ ] `PULSAR_SLACK_BOT_TOKEN` for Canvas create
+- [x] `PULSAR_SLACK_BOT_TOKEN` Canvas update (`canvases:read` + `canvases:write`) — fixed Canvas `F0BN0E7RJ31`
 - [ ] Snowflake MCP attached (SQL API + PAT fallback works)
 
 ## Create automation
