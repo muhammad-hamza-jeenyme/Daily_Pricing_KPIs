@@ -14,7 +14,7 @@ Watches detail lives in Canvas (see `CANVAS_WATCH_TEMPLATE.md`) — **not** in t
 5. JO city code line: `AMM | IRB | ZRQ | Others`
 6. Footer: always link the fixed Canvas  
    `Canvas: https://easytaxime.slack.com/docs/T33U3F6CW/F0BN0E7RJ31`  
-   If Canvas update failed this run, add one short note: `Canvas update failed (bot token missing).`
+   If Canvas update failed this run, add one short note, e.g. `Canvas update failed (missing_scope).` or `Canvas update failed (bot token missing).`
 
 ## Example
 
