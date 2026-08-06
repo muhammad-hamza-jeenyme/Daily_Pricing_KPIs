@@ -1,6 +1,6 @@
 # Project memory — Daily Pricing KPIs
 
-Last updated: 2026-08-06 (channel summary + Canvas watches path)
+Last updated: 2026-08-06 (cron #3 — Canvas update succeeded)
 
 ## Mission
 
@@ -28,14 +28,14 @@ Channel: **% fare increase only** (country + cities/Others). Watches detail: **C
 - Templates: `automations/SLACK_MESSAGE_TEMPLATE.md`, `automations/CANVAS_WATCH_TEMPLATE.md`
 - Cities SA: RUH, JED, MAD, DMM, MEC + Others | JO: AMM, IRB, ZRQ + Others
 - Major shift / Watch: yesterday > prior **7** complete days average
-- Canvas needs `PULSAR_SLACK_BOT_TOKEN` with **canvases:read + canvases:write** (token present 2026-08-06 but scopes insufficient)
+- Canvas: `PULSAR_SLACK_BOT_TOKEN` with `canvases:read` + `canvases:write` (working as of cron #3)
 
-## Last cron run (2026-08-06, branch `cursor/pricing-fare-integrity-daily-abc6`)
+## Last cron run (2026-08-06, branch `cursor/pricing-fare-integrity-daily-5122`)
 
 - report_date **2026-08-05**
 - Snowflake SQL API OK (MCP still not attached)
 - Pulsar short channel summary posted (HTTP 200)
-- Canvas update failed: bot token missing `canvases:read`/`canvases:write` (provided: chat:write, incoming-webhook); watches not dumped to channel
+- Canvas `F0BN0E7RJ31` updated successfully via `canvases.edit` `insert_at_start`
 
 ## Pulsar + Canvas (locked 2026-08-06)
 
@@ -44,5 +44,4 @@ Channel: **% fare increase only** (country + cities/Others). Watches detail: **C
 - Watches SQL: `sql/fare_integrity_slack_rollup.sql`
 - Channel post: `PULSAR_SLACK_WEBHOOK_URL` only (never Cursor send_slack_message for digest)
 - Fixed Canvas: `F0BN0E7RJ31` — https://easytaxime.slack.com/docs/T33U3F6CW/F0BN0E7RJ31
-- Canvas edit needs `PULSAR_SLACK_BOT_TOKEN`
-
+- Canvas edit: `PULSAR_SLACK_BOT_TOKEN` → `canvases.sections.lookup` + `canvases.edit`
