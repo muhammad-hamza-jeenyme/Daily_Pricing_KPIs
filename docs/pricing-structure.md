@@ -9,7 +9,7 @@ Status: **v1 locked** (2026-08-03). SQL ready for Snowflake validation.
 Track **fare integrity / price shocks** on boarded rides with destination: charged fare vs PriceCheck shown fare. Segregate **non-issue** vs **pricing-experience** drivers; include **fare decreases**. Split by `withinA` / `withinB` / `BeyondB`.
 
 Universe: `BOARDED IS NOT NULL`, `ORIGINALESTIMATEFARE IS NOT NULL`, `country_code IN ('SA','JO')`.  
-Time: `Ride.Details.CREATEDDATE` in **Saudi time**; agent **11:30 AM PKT**.  
+Time: `Ride.Details.CREATEDDATE` in **Saudi time**; agent **11:00 AM PKT**.  
 Grain for digests: **day × AREA_CODE × UPFRONTSCENARIO × issue-type**, last **29 days** (DoD / WoW / MoM vs 28d prior).
 
 ## Upfront flowchart (confirmed)

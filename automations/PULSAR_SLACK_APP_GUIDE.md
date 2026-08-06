@@ -61,13 +61,41 @@ This guide creates a **custom Slack app** so messages appear as **Pulsar**, not 
 |-------|-----|
 | `chat:write` | Post messages as Pulsar |
 | `chat:write.public` | Post to public channels without joining (optional; still invite is cleaner) |
-| `files:write` | Upload files / some canvas-adjacent flows (optional) |
+| `canvases:read` | Read Pricing Alerts canvas before update |
+| `canvases:write` | **Required** to update canvas `F0BN0E7RJ31` daily |
+| `files:read` | Often needed with canvas APIs |
 | `channels:read` | Resolve channel metadata (optional) |
-| `groups:write` / `channels:join` | Only if you need to join private/public channels programmatically |
 
-**Minimum for webhook-style posting:** Incoming Webhook (no bot scopes beyond install), **or** bot with `chat:write`.
+**Channel message:** Incoming Webhook is enough.  
+**Canvas update:** requires Bot Token (`xoxb-…`) with `canvases:read` + `canvases:write`. Webhook alone → `Canvas update failed (bot token missing)`.
 
-3. Do **not** add broad scopes you don’t need (`admin`, `*` search, etc.).
+## Fix: `Canvas update failed (missing_scope)`
+
+This means `PULSAR_SLACK_BOT_TOKEN` exists, but the token was issued **without** canvas scopes (or Cloud still has the **old** token).
+
+### Do these in order
+
+1. Open [api.slack.com/apps](https://api.slack.com/apps) → **Pulsar**.
+2. **OAuth & Permissions** → **Bot Token Scopes** → add if missing:
+   - `canvases:read`
+   - `canvases:write`
+3. Click **Reinstall to Workspace** (required — adding scopes does nothing until reinstall).
+4. Copy the **new** Bot User OAuth Token (`xoxb-…`).
+5. Cursor Cloud → **My Secrets** → edit `PULSAR_SLACK_BOT_TOKEN` → paste the **new** token → Save.
+6. In Slack, open canvas [Pricing Alerts](https://easytaxime.slack.com/docs/T33U3F6CW/F0BN0E7RJ31) → share/access → give **Pulsar** **can edit** (write), not view-only.
+7. Re-run the **existing** Pricing KPI Alerts automation.
+
+### Quick local check (optional)
+
+After updating the secret locally in a temp env var (do not commit):
+
+```powershell
+$token = "xoxb-YOUR-NEW-TOKEN"
+# Should return ok:true and list scopes including canvases:write
+Invoke-RestMethod -Uri "https://slack.com/api/auth.test" -Headers @{ Authorization = "Bearer $token" }
+```
+
+If `auth.test` works but canvas still fails, the token is valid but Pulsar still needs **edit** access on canvas `F0BN0E7RJ31`.
 
 ---
 

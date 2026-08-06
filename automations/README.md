@@ -9,7 +9,7 @@ The digest must run **even when your laptop is off**. A local Cursor chat / lapt
 | Item | Value |
 |------|-------|
 | Cadence | Daily |
-| Time | **11:30 AM PKT** → cron `30 6 * * *` (06:30 UTC; confirm editor timezone display) |
+| Time | **11:00 AM PKT** → cron `0 6 * * *` (06:00 UTC; confirm editor timezone display) |
 | Job | Run fare-integrity digest → DoD/WoW/MoM + vs 7d avg → Slack `C0BMWLMR03T` (+ optional canvas) |
 
 ## Watchlist cities
@@ -26,4 +26,4 @@ The digest must run **even when your laptop is off**. A local Cursor chat / lapt
 
 ## Create automation
 
-Open Automations editor with draft: daily cron 11:30 AM PKT, Slack post only to `C0BMWLMR03T`, instructions from `automations/DAILY_SLACK_INSTRUCTIONS.md`. Select Snowflake MCP in the editor if not prefilled.
+**Do not create a new automation.** Edit the existing **Pricing KPI Alerts Slack** automation only — see `automations/USE_EXISTING_AUTOMATION.md`.

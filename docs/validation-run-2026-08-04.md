@@ -48,4 +48,4 @@ Approx **5.18M** boarded rides with destination in scope.
 
 1. Add DoD/WoW/MoM rollup on this digest grain.
 2. Define Slack alert thresholds (e.g. withinB % / increase_pricing rate by area).
-3. Wire Cloud Agent schedule 11:30 AM PKT.
+3. Cloud Agent schedule **11:00 AM PKT** (`0 6 * * *` UTC).

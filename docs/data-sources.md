@@ -4,7 +4,7 @@ Status: **Validated** via MCP on 2026-08-04 (`docs/validation-run-2026-08-04.md`
 
 ## Runtime
 
-- Agent: Cursor Cloud Agent (planned 11:30 AM PKT)
+- Agent: Cursor Cloud Agent (**11:00 AM PKT**)
 - Access: Snowflake MCP `sql_exec_tool`
 - Primary SQL: `sql/fare_integrity_daily_digest.sql`
 
