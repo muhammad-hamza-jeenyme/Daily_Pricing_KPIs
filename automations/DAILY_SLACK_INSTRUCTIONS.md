@@ -1,35 +1,34 @@
 # Pulsar daily fare-integrity report (Cloud Automation)
 
 ## Goal
-Every day at **11:30 AM PKT**, run Snowflake rollup for 8 major cities, summarize DoD/WoW/MoM + major shifts, and post **as Pulsar** via Incoming Webhook only.
+Every day at **11:00 AM PKT**: Snowflake → short Pulsar channel message (**% fare increase only**) + Slack Canvas for detailed watches.
 
 ## Repo
 `muhammad-hamza-jeenyme/Daily_Pricing_KPIs` branch `main`.
 
 ## Tools
-- **Snowflake MCP** — run SQL (`sql_exec_tool` or equivalent).
-- **Do not** use Cursor’s built-in Slack “post to channel” action.
-- **Do not** DM users or post to any channel except via the Pulsar webhook.
+- **Snowflake MCP** — run SQL (`sql_exec_tool` or equivalent). Fallback: Snowflake SQL API + PAT.
+- **Slack Canvas create** — detailed watches; share link in channel footer.
+- **Do not** use Cursor’s built-in Slack “post to channel” for the digest body.
+- Post channel summary via **`PULSAR_SLACK_WEBHOOK_URL` only**.
 
-## Secrets (Cloud My Secrets)
-- `PULSAR_SLACK_WEBHOOK_URL` — Pulsar Incoming Webhook (already bound to `C0BMWLMR03T`).
+## Secrets
+- `PULSAR_SLACK_WEBHOOK_URL` — Pulsar Incoming Webhook (bound to `#pricing-alerts`).
+- `PULSAR_SLACK_BOT_TOKEN` — Canvas create/update (required for watches Canvas).
 - Snowflake PAT / MCP auth as configured for Cloud Agents.
 
 ## Steps each run
-1. Run `sql/fare_integrity_slack_rollup.sql` on Snowflake.
-2. Build a **short** Slack message:
-   - Header: `Pulsar · Pricing fare-integrity · {report_date}`
-   - Snapshot: one bullet per city (RUH, JED, MAD, DMM, MEC, AMM, IRB, ZRQ) with rides, `%inc_pricing` + DoD/WoW/MoM, `%withinB`, key fields.
-   - **Watch / major shifts:** any KPI where yesterday > prior **7-day** average — list `Area_Code`, KPI, yesterday, 7d avg, deltas.
-3. POST to Pulsar webhook:
-   - URL = environment variable `PULSAR_SLACK_WEBHOOK_URL`
-   - Body JSON: `{"text": "<full message markdown>"}`  
-   - Use `curl` or equivalent HTTP POST from the Cloud Agent environment.
-4. If Snowflake fails: POST one short failure line to the same webhook only. Do not invent KPI numbers.
+1. Run `sql/fare_integrity_channel_summary.sql` → country + city/Others % fare increase with DoD/WoW/MoM and vs 7d avg.
+2. Run `sql/fare_integrity_slack_rollup.sql` → 8 major cities multi-KPI detail for Canvas watches.
+3. Create Canvas per `automations/CANVAS_WATCH_TEMPLATE.md` (title `Pricing Fare Integrity Daily — {report_date}`).
+4. POST short channel message via Pulsar webhook per `automations/SLACK_MESSAGE_TEMPLATE.md` (include Canvas link or unavailable note).
+5. If Snowflake fails: one short Pulsar failure line. Do not invent numbers.
+6. If Canvas fails: still post the short channel summary; note canvas unavailable in one line. Do **not** dump multi-KPI watches into the channel.
 
 ## Hard constraints
-- Post **only** via `PULSAR_SLACK_WEBHOOK_URL` (Pulsar bot). Never Cursor Slack send.
-- Never print or log the webhook URL or PAT in the Slack message.
-- Token-efficient: rollup SQL only, no ride-level dumps.
-- Major shift rule: yesterday > avg of prior 7 complete days (not 14).
-- Spec: `docs/alert-rules.md`, `automations/DAILY_SLACK_INSTRUCTIONS.md`.
+- Channel message = % fare increase country + cities/Others only.
+- Watches detail = Canvas, not channel noise.
+- Major shift = yesterday > prior 7-day average.
+- Never log webhook URL / PAT.
+- Never post outside Pulsar webhook / the pricing channel.
+- Spec: `docs/alert-rules.md`, templates under `automations/`.
