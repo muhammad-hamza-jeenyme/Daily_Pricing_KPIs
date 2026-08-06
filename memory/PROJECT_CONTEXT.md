@@ -1,6 +1,6 @@
 # Project memory — Daily Pricing KPIs
 
-Last updated: 2026-08-05 (14d watch + Pulsar webhook digest)
+Last updated: 2026-08-06 (cron digest posted via Pulsar; report_date 2026-08-05)
 
 ## Mission
 
