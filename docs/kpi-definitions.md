@@ -10,7 +10,7 @@ Status: **v1 fare-integrity** locked 2026-08-03.
 | **WoW** | Yesterday vs 7 days earlier |
 | **MoM** | Yesterday vs **28 days before** |
 
-`createddate` is Saudi calendar date. Agent runs 11:30 AM PKT. Digest window = last 29 complete days (`createddate < CURRENT_DATE`).
+`createddate` is Saudi calendar date. Agent runs 11:00 AM PKT. Digest window = last 29 complete days (`createddate < CURRENT_DATE`). Watch compares yesterday to the prior 14 complete days average.
 
 ## v1 catalogue — fare integrity
 
