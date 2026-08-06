@@ -30,11 +30,12 @@ BaseData AS (
         COALESCE(rr.vatoncancellationfine, 0) AS rr_vatcancelfine,
         COALESCE(rr.waitingcharges, 0) AS rr_waitingcharges,
         COALESCE(rr.vatonwaitingcharges, 0) AS rr_vatwaitingcharges
-    FROM jeeny_prod.ride.details rd  -- pragma: allowlist secret
-    JOIN jeeny_prod.ride.upfront uf ON rd.rideid = uf.rideid  -- pragma: allowlist secret
-    JOIN jeeny_prod.ride.receipts rr ON rd.rideid = rr.rideid  -- pragma: allowlist secret
-    JOIN jeeny_prod.general.areas ga ON rd.area_code = ga.area_code  -- pragma: allowlist secret
-    JOIN jeeny_prod.passengers.pricechecks pc  -- pragma: allowlist secret
+    /* database set via Snowflake session / API (SNOWFLAKE_DATABASE) */
+    FROM ride.details rd
+    JOIN ride.upfront uf ON rd.rideid = uf.rideid
+    JOIN ride.receipts rr ON rd.rideid = rr.rideid
+    JOIN general.areas ga ON rd.area_code = ga.area_code
+    JOIN passengers.pricechecks pc
         ON pc.rideid = rd.rideid
        AND LOWER(pc.servicefilter) = LOWER(rd.request_service)
     WHERE rd.boarded IS NOT NULL
