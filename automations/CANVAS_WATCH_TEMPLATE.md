@@ -1,6 +1,14 @@
 # Slack Canvas — detailed watches template
 
-Title: `Pricing Fare Integrity Daily — {report_date}`
+**Fixed Canvas (do not create a new one each day)**  
+- ID: `F0BN0E7RJ31`  
+- URL: https://easytaxime.slack.com/docs/T33U3F6CW/F0BN0E7RJ31
+
+Title / top of canvas (date must be obvious):
+```
+# Pricing Fare Integrity Daily — {report_date}
+Report date: {report_date}
+```
 
 Source SQL: `sql/fare_integrity_slack_rollup.sql` (8 major cities).  
 DX style reference: channel Canvas docs (compact Watch / Alert sections per country).
@@ -15,6 +23,8 @@ Major shift / Watch rule: **yesterday > prior 7-day average**.
    - **Watch** (and **Alerts** subheading only if any major shift)
    - One bullet per watchlist city with any flagged KPI
 3. **JO** section — same
+
+Each run: read Canvas `F0BN0E7RJ31` for section IDs, then replace content with today’s watches (do not create a new canvas).
 
 ## Per-area line
 
@@ -34,6 +44,7 @@ Hints (pick one short phrase):
 
 - Only list area × KPI where `major_shift_*` is true (Watch).
 - If a country has zero watches: `No major shifts vs 7d avg.`
-- Share Canvas link into the Pulsar channel summary footer.
-- Webhook cannot create Canvas — needs `PULSAR_SLACK_BOT_TOKEN` (or equivalent Slack bot with `canvases:write` + channel access).
-- If Canvas create fails: still post the short Pulsar channel summary; footer notes `Canvas: unavailable`.
+- Share Canvas link into the Pulsar channel summary footer:  
+  https://easytaxime.slack.com/docs/T33U3F6CW/F0BN0E7RJ31
+- Webhook cannot edit Canvas — needs `PULSAR_SLACK_BOT_TOKEN` (or equivalent Slack bot with `canvases:write` + channel access).
+- If Canvas update fails: still post the short Pulsar channel summary; note canvas update failed in one line (do not dump multi-KPI watches into the channel).

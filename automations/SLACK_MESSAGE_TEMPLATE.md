@@ -12,7 +12,9 @@ Watches detail lives in Canvas (see `CANVAS_WATCH_TEMPLATE.md`) — **not** in t
 3. SA city code line: `RUH | JED | MAD | DMM | MEC | Others` (each with %)
 4. JO country line: same pattern
 5. JO city code line: `AMM | IRB | ZRQ | Others`
-6. Footer: `Canvas: {permalink}` or `Canvas: unavailable (bot token missing)`
+6. Footer: always link the fixed Canvas  
+   `Canvas: https://easytaxime.slack.com/docs/T33U3F6CW/F0BN0E7RJ31`  
+   If Canvas update failed this run, add one short note: `Canvas update failed (bot token missing).`
 
 ## Example
 

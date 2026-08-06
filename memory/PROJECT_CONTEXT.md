@@ -36,3 +36,13 @@ Channel: **% fare increase only** (country + cities/Others). Watches detail: **C
 - Snowflake SQL API OK (MCP still not attached)
 - Pulsar short channel summary posted
 - Canvas skipped (no bot token); watches not dumped to channel
+
+## Pulsar + Canvas (locked 2026-08-06)
+
+- Schedule: **11:00 AM PKT** (`0 6 * * *` UTC)
+- Channel summary SQL: `sql/fare_integrity_channel_summary.sql` (% fare ↑ only)
+- Watches SQL: `sql/fare_integrity_slack_rollup.sql`
+- Channel post: `PULSAR_SLACK_WEBHOOK_URL` only (never Cursor send_slack_message for digest)
+- Fixed Canvas: `F0BN0E7RJ31` — https://easytaxime.slack.com/docs/T33U3F6CW/F0BN0E7RJ31
+- Canvas edit needs `PULSAR_SLACK_BOT_TOKEN`
+
