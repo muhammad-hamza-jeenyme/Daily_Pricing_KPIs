@@ -1,10 +1,11 @@
 # Project memory — Daily Pricing KPIs
 
-Last updated: 2026-08-04 (Snowflake digest validated + repo sync)
+Last updated: 2026-08-06 (cron #3 — Canvas update succeeded)
 
 ## Mission
 
-Fare-integrity tracker (v1). Cloud Agent **11:30 AM PKT**; SA+JO; digest **day × AREA_CODE × UPFRONTSCENARIO × issue_type**; **29** complete days; DoD/WoW/MoM (vs 28d prior).
+Fare-integrity tracker (v1). Cloud Agent **11:00 AM PKT**; SA+JO.
+Channel: **% fare increase only** (country + cities/Others). Watches detail: **Canvas**.
 
 ## Locked compare
 
@@ -16,26 +17,31 @@ Fare-integrity tracker (v1). Cloud Agent **11:30 AM PKT**; SA+JO; digest **day �
 
 ## SQL
 
-- Aggregate: `sql/fare_integrity_daily_digest.sql` ← **run this**
+- Channel summary: `sql/fare_integrity_channel_summary.sql`
+- Canvas watches rollup: `sql/fare_integrity_slack_rollup.sql`
+- Full grain digest: `sql/fare_integrity_daily_digest.sql`
 - Ride-level: `tables schema/draft SQL.sql`
-- Validation notes: `docs/validation-run-2026-08-04.md`
 
-## Validation (2026-08-04)
+## Slack / automation (locked 2026-08-06)
 
-- Query succeeded on Snowflake MCP
-- Window: 2026-07-06 → 2026-08-03 (~5.18M rides)
-- Yesterday top `increase_pricing` areas: AMM, JED, RUH, …
+- Channel: `#pricing-alerts` via **Pulsar webhook only**
+- Templates: `automations/SLACK_MESSAGE_TEMPLATE.md`, `automations/CANVAS_WATCH_TEMPLATE.md`
+- Cities SA: RUH, JED, MAD, DMM, MEC + Others | JO: AMM, IRB, ZRQ + Others
+- Major shift / Watch: yesterday > prior **7** complete days average
+- Canvas: `PULSAR_SLACK_BOT_TOKEN` with `canvases:read` + `canvases:write` (working as of cron #3)
 
-## Slack / automation (locked 2026-08-04)
+## Last cron run (2026-08-06, branch `cursor/pricing-fare-integrity-daily-5122`)
 
-- Channel: `C0BMWLMR03T`
-- Cities: RUH, JED, MAD, DMM, MEC, AMM, IRB, ZRQ
-- Major shift: yesterday KPI > avg of prior 7 complete days; always name Area_Code
-- **Requires Cursor Cloud Agent** (laptop-independent)
-- Spec: `docs/alert-rules.md`
+- report_date **2026-08-05**
+- Snowflake SQL API OK (MCP still not attached)
+- Pulsar short channel summary posted (HTTP 200)
+- Canvas `F0BN0E7RJ31` updated successfully via `canvases.edit` `insert_at_start`
 
-## Next
+## Pulsar + Canvas (locked 2026-08-06)
 
-1. Build DoD/WoW/MoM + 7d-avg rollup SQL (watchlist cities)
-2. Slack daily report + major-shift format (optional canvas)
-3. Create Cloud Automation @ 11:30 AM PKT
+- Schedule: **11:00 AM PKT** (`0 6 * * *` UTC)
+- Channel summary SQL: `sql/fare_integrity_channel_summary.sql` (% fare ↑ only)
+- Watches SQL: `sql/fare_integrity_slack_rollup.sql`
+- Channel post: `PULSAR_SLACK_WEBHOOK_URL` only (never Cursor send_slack_message for digest)
+- Fixed Canvas: `F0BN0E7RJ31` — https://easytaxime.slack.com/docs/T33U3F6CW/F0BN0E7RJ31
+- Canvas edit: `PULSAR_SLACK_BOT_TOKEN` → `canvases.sections.lookup` + `canvases.edit`
