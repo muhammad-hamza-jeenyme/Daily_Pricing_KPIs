@@ -26,6 +26,13 @@ Major shift / Watch rule: **yesterday > prior 7-day average**.
 
 Each run: read Canvas `F0BN0E7RJ31` for section IDs, then replace content with today’s watches (do not create a new canvas).
 
+Canvas replace path (bot token `PULSAR_SLACK_BOT_TOKEN`):
+1. `auth.test`
+2. `canvases.sections.lookup` with `section_types: any_header` (also ok: `h1`/`h2`/`h3`)
+3. Delete **one section per** `canvases.edit` call (`operation: delete`) — batch delete+insert in one request often returns `invalid_arguments`
+4. Then `canvases.edit` `insert_at_start` with today’s markdown
+5. Never use the Incoming Webhook for canvas edits
+
 ## Per-area line
 
 ```
