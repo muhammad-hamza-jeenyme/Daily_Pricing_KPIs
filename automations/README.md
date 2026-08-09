@@ -9,21 +9,24 @@ The digest must run **even when your laptop is off**. A local Cursor chat / lapt
 | Item | Value |
 |------|-------|
 | Cadence | Daily |
-| Time | **11:30 AM PKT** → cron `30 6 * * *` (06:30 UTC; confirm editor timezone display) |
-| Job | Run fare-integrity digest → DoD/WoW/MoM + vs 7d avg → Slack `C0BMWLMR03T` (+ optional canvas) |
+| Time | **11:00 AM PKT** → cron `0 6 * * *` (06:00 UTC) |
+| Job | Channel summary (% fare ↑) via Pulsar webhook + Canvas watches detail |
 
 ## Watchlist cities
 
-`RUH`, `JED`, `MAD`, `DMM`, `MEC`, `AMM`, `IRB`, `ZRQ`
+`RUH`, `JED`, `MAD`, `DMM`, `MEC`, `AMM`, `IRB`, `ZRQ` (+ Others buckets in channel summary)
 
 ## Status
 
-- [x] Channel ID decided (`C0BMWLMR03T` only)
+- [x] Channel decided (`#pricing-alerts` only)
 - [x] Major-shift rule (yesterday > prior 7d avg)
-- [x] DoD/WoW/MoM rollup SQL: `sql/fare_integrity_slack_rollup.sql`
+- [x] Channel summary SQL: `sql/fare_integrity_channel_summary.sql`
+- [x] Rollup SQL (Canvas watches): `sql/fare_integrity_slack_rollup.sql`
+- [x] Templates: `SLACK_MESSAGE_TEMPLATE.md`, `CANVAS_WATCH_TEMPLATE.md`
 - [x] Bot instructions: `automations/DAILY_SLACK_INSTRUCTIONS.md`
-- [ ] Cloud Automation created & enabled (Snowflake MCP must be selected for Cloud Agents)
+- [x] `PULSAR_SLACK_BOT_TOKEN` Canvas update (`canvases:read` + `canvases:write`) — fixed Canvas `F0BN0E7RJ31`
+- [ ] Snowflake MCP attached (SQL API + PAT fallback works)
 
 ## Create automation
 
-Open Automations editor with draft: daily cron 11:30 AM PKT, Slack post only to `C0BMWLMR03T`, instructions from `automations/DAILY_SLACK_INSTRUCTIONS.md`. Select Snowflake MCP in the editor if not prefilled.
+Open Automations editor with draft: daily cron 11:00 AM PKT, Pulsar webhook + Canvas, instructions from `automations/DAILY_SLACK_INSTRUCTIONS.md`.
