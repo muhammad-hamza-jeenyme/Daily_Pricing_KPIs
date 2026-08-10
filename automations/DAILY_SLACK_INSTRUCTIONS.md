@@ -3,65 +3,56 @@
 **Use existing automation only** (Pricing KPI Alerts Slack). Do not create a new one.
 
 ## Goal
-Daily **11:00 AM PKT**: Snowflake → **short channel message** (fare-increase % only) as **Pulsar** + **update fixed Canvas** for detailed watches.
+Daily **11:00 AM PKT**: Snowflake → **short Pulsar channel message** + **update Canvas `F0BN0E7RJ31`**.
 
 ## Repo
 `muhammad-hamza-jeenyme/Daily_Pricing_KPIs` @ `main`.
 
-## Tools
-- **Snowflake MCP** — SQL.
-- **Slack Canvas** — **update** existing canvas `F0BN0E7RJ31` (do not create a new canvas each day).
-- **Do not** use Cursor Slack “post to channel” for the digest body.
-- Post channel summary via **`PULSAR_SLACK_WEBHOOK_URL`** only.
-
-## Secrets (sensitive only)
-- `PULSAR_SLACK_WEBHOOK_URL` — channel summary (Pulsar)
-- `PULSAR_SLACK_BOT_TOKEN` — Bot User OAuth Token `xoxb-…` with `canvases:read` + `canvases:write` (required to update canvas)
-- Snowflake PAT / MCP for Cloud  
-
-**Not a secret:** Canvas ID `F0BN0E7RJ31` / URL (keep in instructions).
-
-### Why canvas failed before
-Incoming Webhook can post the short channel message but **cannot** edit canvases. Without `PULSAR_SLACK_BOT_TOKEN`, you get: `Canvas update failed (bot token missing).`
-## Fixed Canvas (Pricing Alerts channel)
-- ID: `F0BN0E7RJ31`
-- URL: https://easytaxime.slack.com/docs/T33U3F6CW/F0BN0E7RJ31
-- Always put **report date at the top** of the canvas for easy reading.
+## Tools / secrets
+- Snowflake MCP
+- `PULSAR_SLACK_WEBHOOK_URL` — channel post
+- `PULSAR_SLACK_BOT_TOKEN` — canvas update (`canvases:read` + `canvases:write`; reinstall app after adding scopes)
+- Fixed canvas: `F0BN0E7RJ31` — https://easytaxime.slack.com/docs/T33U3F6CW/F0BN0E7RJ31  
+  (**not** a secret)
 
 ## Steps each run
 
-### 1) Channel summary SQL
+### 1) Main SQL (channel + canvas metrics)
 Run `sql/fare_integrity_channel_summary.sql`  
-→ country + city/Others `% rides with fare increase` with DoD/WoW/MoM and vs 7d avg.
+Returns country + city/Others for yesterday with DoD/WoW/MoM / vs7d:
 
-### 2) Detailed watches SQL
-Run `sql/fare_integrity_slack_rollup.sql` (8 major cities) for canvas watches / multi-KPI detail.
+- `pct_increase_pricing` (+ deltas)
+- `surcharge_mismatch_rides` / `pct_surcharge_mismatch` (+ deltas, major_shift flag)
+- `pickup_mismatch_rides` / `pct_pickup_mismatch` (+ deltas, major_shift flag)
 
-### 3) Update Canvas `F0BN0E7RJ31`
-Follow `automations/CANVAS_WATCH_TEMPLATE.md` (DX style).
+Optional detail for majors: `sql/fare_integrity_slack_rollup.sql`
 
-1. Use Bot Token from env `PULSAR_SLACK_BOT_TOKEN` (Authorization: `Bearer xoxb-…`).
-2. Read canvas `F0BN0E7RJ31` (Slack canvases API / Slack MCP if available with that token).
-3. Replace content with today’s watches/alerts.
-4. Top must show date clearly, e.g. `# Pricing Fare Integrity Daily — YYYY-MM-DD` and `Report date: YYYY-MM-DD`.
-5. Do **not** use the webhook for canvas edits.
-### 4) Post short Slack message (Pulsar webhook)
-Follow `automations/SLACK_MESSAGE_TEMPLATE.md` (bizfin-style):
+### 2) Update Canvas `F0BN0E7RJ31`
+Follow `automations/CANVAS_WATCH_TEMPLATE.md`.  
+Date at top. Include watches for fare-increase %, surcharge mismatch, pickup mismatch (>100m).
 
-- **SA** / **JO** country `% fare increase` + DoD/WoW/MoM + vs 7d avg
-- City-wise tables (majors + Others)
-- Footer link: https://easytaxime.slack.com/docs/T33U3F6CW/F0BN0E7RJ31
+### 3) Post short Slack message (Pulsar webhook)
+Follow `automations/SLACK_MESSAGE_TEMPLATE.md`:
 
-No long multi-KPI dumps in the channel.
+- SA / JO: fare-increase % + surcharge mismatch counts + pickup mismatch counts
+- City-wise tables (majors + Others) for each
+- Footer: canvas link
 
-### 5) Failures
-If Snowflake fails: one short Pulsar webhook line. Do not invent numbers.  
-If Canvas update fails: still post the short channel summary; note canvas update failed in one line.
+### 4) Failures
+Snowflake fail → one webhook line.  
+Canvas fail → still post channel summary; note canvas error in one line (e.g. missing_scope).
+
+## Definitions (do not invent)
+
+**Surcharge mismatch**  
+`lower(upfrontscenario)='withina'` AND dropoff at destination  
+AND `ROUND(rd.SURCHARGE + rd.INTERCITYSURCHARGE, 2) != ROUND(pc.SURCHARGE, 2)`
+
+**Pickup mismatch**  
+PriceCheck pickup lat/long vs first `ride.eventhistory` `ride_offered` location  
+`ST_DISTANCE(TO_GEOGRAPHY(...), TO_GEOGRAPHY(...)) > 100` (meters)
 
 ## Hard constraints
-- Existing automation only.
-- Channel message = **% fare increase** country + cities/Others only.
-- Watches detail = **Canvas `F0BN0E7RJ31`**, not channel noise.
-- Major shift = yesterday > prior **7-day** average.
-- Never log webhook URL / PAT.
-- Never post outside Pulsar webhook / the pricing channel.
+- Existing automation only; schedule **11:00 AM PKT** (`0 6 * * *` UTC).
+- Never log webhook URL / PAT / bot token.
+- Channel stays short; detail on canvas.
