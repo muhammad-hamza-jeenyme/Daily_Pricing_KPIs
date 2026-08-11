@@ -1,6 +1,6 @@
 # Project memory — Daily Pricing KPIs
 
-Last updated: 2026-08-04 (Snowflake digest validated + repo sync)
+Last updated: 2026-08-11 (`FIXEDSPEEDCAP` + `MAXWITHINMINUTESVARIANCE` / withinA rule)
 
 ## Mission
 
@@ -13,6 +13,8 @@ Fare-integrity tracker (v1). Cloud Agent **11:00 AM PKT**; SA+JO; digest **day �
 - Norm receipt = `RR.TOTALAMOUNTWITHTAX + DISCOUNT + VATONDISCOUNT`
 - issue_type: `matched` | `rounding` | `increase_non_issue` | `increase_pricing` | `decrease_pricing`
 - Prod scenario casing: `withinA` | `withinB` | `beyondB`
+- `withinA` = A-band (`ACTUALTIME*60` in `[TIMETHRESHHOLDSALOWVALUE, TIMETHRESHHOLDSAHIGHVALUE]`) **or** `ACTUALTIME − APPLIEDESTIMATETIME ≤ MAXWITHINMINUTESVARIANCE`
+- `UPFRONT.FIXEDSPEEDCAP` = speed for `SCALEDDISTANCE` from `ACTUALTIME`; `MAXWITHINMINUTESVARIANCE` = max WithinA allowance (minutes)
 
 ## SQL
 

@@ -23,8 +23,9 @@ Status: **v1 fare-integrity** locked 2026-08-03.
 | `sum_residual` | Fare_Diff − non_issue (waiting+cancel) | same |
 | `dropoff_not_at_dest_rides` | Dropoff ≠ destination | same |
 | `scaled_distance_rides` | `SCALEDDISTANCE > 0` | day × area |
-| `surge_mismatch_rides` | PC surge ≠ Details surge | day × area |
-| `pd_mismatch_rides` | PC PD ≠ Details PD | day × area |
+| `surge_mismatch_rides` | both non-null AND `ROUND(PC.SURGEMULTIPLIER,4) <> ROUND(Details.SURGEMULTIPLIER,4)` | day × area (+ channel city tables) |
+| `pd_mismatch_rides` | both non-null AND `ROUND(PC.DISCRIMINATIONMULTIPLIER,4) <> ROUND(Details.DISCRIMINATIONMULTIPLIER,4)` | day × area (+ channel city tables) |
+| `% rides with fare increase` (channel) | `increase_pricing` only — residual after waiting/cancel; excludes `increase_non_issue` | country / city |
 
 ## Formulas
 

@@ -13,7 +13,7 @@ Status: **Validated** via MCP on 2026-08-04 (`docs/validation-run-2026-08-04.md`
 | Object | Role |
 |--------|------|
 | `JEENY_PROD.RIDE.DETAILS` | Boarded rides, `CREATEDDATE` (Saudi), surge/PD, area |
-| `JEENY_PROD.RIDE.UPFRONT` | Scenario, ORIG/CHARGING fares, scaled distance, dropoff flag |
+| `JEENY_PROD.RIDE.UPFRONT` | Scenario, ORIG/CHARGING fares, scaled distance (`FIXEDSPEEDCAP`), WithinA max variance (`MAXWITHINMINUTESVARIANCE`), dropoff flag |
 | `JEENY_PROD.RIDE.RECEIPTS` | Final `TOTALAMOUNTWITHTAX`, waiting, cancel, discount |
 | `JEENY_PROD.PASSENGERS.PRICECHECKS` | PriceCheck `VALUE`, `VAT` (hailing), `SURCHARGE` (ex-VAT) |
 | `JEENY_PROD.GENERAL.AREAS` | `country_code` (SA / JO) |
@@ -39,3 +39,7 @@ Status: **Validated** via MCP on 2026-08-04 (`docs/validation-run-2026-08-04.md`
 ## Scenario casing (prod)
 
 `withinA` | `withinB` | `beyondB`
+
+**withinA** when either:
+1. `ACTUALTIME * 60` ∈ `[TIMETHRESHHOLDSALOWVALUE, TIMETHRESHHOLDSAHIGHVALUE]`, or
+2. `ACTUALTIME − APPLIEDESTIMATETIME ≤ MAXWITHINMINUTESVARIANCE` (minutes)

@@ -1,12 +1,16 @@
--- Channel summary: % fare increase + surcharge mismatch + pickup estimate mismatch
+-- Channel summary: % fare increase + surcharge / pickup / surge / PD mismatch
 -- Country + major cities + Others (SA/JO)
 -- Major SA: RUH, JED, MAD, DMM, MEC | Major JO: AMM, IRB, ZRQ
 -- Spec: docs/alert-rules.md | automations/DAILY_SLACK_INSTRUCTIONS.md
 --
+-- % fare increase = increase_pricing only (Fare_Diff > 0.01 AND Residual > 0.01).
+--   Does NOT include increase_non_issue (waiting/cancel).
 -- Surcharge mismatch: withinA + dropoff at destination AND
 --   (Details.SURCHARGE + Details.INTERCITYSURCHARGE) != PriceChecks.SURCHARGE
 -- Pickup mismatch: PriceCheck pickup vs first ride_offered location > 100m
---   (Snowflake GEOGRAPHY ST_DISTANCE in meters)
+-- Surge mismatch: ROUND(PC.SURGEMULTIPLIER,4) <> ROUND(Details.SURGEMULTIPLIER,4)
+-- PD mismatch: ROUND(PC.DISCRIMINATIONMULTIPLIER,4) <> ROUND(Details.DISCRIMINATIONMULTIPLIER,4)
+--   (do NOT coalesce multipliers to 0 — NULL vs value is not a mismatch)
 
 WITH params AS (
     SELECT
@@ -42,6 +46,10 @@ BaseRides AS (
         COALESCE(pc.surcharge, 0) AS pc_surcharge_ex_vat,
         COALESCE(rd.surcharge, 0) AS rd_surcharge,
         COALESCE(rd.intercitysurcharge, 0) AS rd_intercitysurcharge,
+        pc.surgemultiplier AS pc_surge,
+        rd.surgemultiplier AS rd_surge,
+        pc.discriminationmultiplier AS pc_pd,
+        rd.discriminationmultiplier AS rd_pd,
         COALESCE(rr.totalamountwithtax, 0) AS rr_total,
         COALESCE(rr.discount, 0) AS rr_discount,
         COALESCE(rr.vatondiscount, 0) AS rr_vatdiscount,
@@ -128,7 +136,21 @@ Classified AS (
                     TO_GEOGRAPHY(ST_MAKEPOINT(oe.location_lng, oe.location_lat))
                  ) > 100
             THEN 1 ELSE 0
-        END AS is_pickup_mismatch
+        END AS is_pickup_mismatch,
+        /* Surge mismatch — both sides non-null; do not coalesce to 0 */
+        CASE
+            WHEN b.pc_surge IS NOT NULL
+             AND b.rd_surge IS NOT NULL
+             AND ROUND(b.pc_surge, 4) <> ROUND(b.rd_surge, 4)
+            THEN 1 ELSE 0
+        END AS is_surge_mismatch,
+        /* PD mismatch — both sides non-null; do not coalesce to 0 */
+        CASE
+            WHEN b.pc_pd IS NOT NULL
+             AND b.rd_pd IS NOT NULL
+             AND ROUND(b.pc_pd, 4) <> ROUND(b.rd_pd, 4)
+            THEN 1 ELSE 0
+        END AS is_pd_mismatch
     FROM BaseRides b
     LEFT JOIN OfferEvent oe ON oe.rideid = b.rideid
 ),
@@ -143,7 +165,11 @@ DailyCountry AS (
         SUM(is_surcharge_mismatch) AS surcharge_mismatch_rides,
         ROUND(100.0 * SUM(is_surcharge_mismatch) / NULLIF(COUNT(*), 0), 2) AS pct_surcharge_mismatch,
         SUM(is_pickup_mismatch) AS pickup_mismatch_rides,
-        ROUND(100.0 * SUM(is_pickup_mismatch) / NULLIF(COUNT(*), 0), 2) AS pct_pickup_mismatch
+        ROUND(100.0 * SUM(is_pickup_mismatch) / NULLIF(COUNT(*), 0), 2) AS pct_pickup_mismatch,
+        SUM(is_surge_mismatch) AS surge_mismatch_rides,
+        ROUND(100.0 * SUM(is_surge_mismatch) / NULLIF(COUNT(*), 0), 2) AS pct_surge_mismatch,
+        SUM(is_pd_mismatch) AS pd_mismatch_rides,
+        ROUND(100.0 * SUM(is_pd_mismatch) / NULLIF(COUNT(*), 0), 2) AS pct_pd_mismatch
     FROM Classified
     GROUP BY 1, 2
 ),
@@ -159,7 +185,11 @@ DailyCity AS (
         SUM(is_surcharge_mismatch) AS surcharge_mismatch_rides,
         ROUND(100.0 * SUM(is_surcharge_mismatch) / NULLIF(COUNT(*), 0), 2) AS pct_surcharge_mismatch,
         SUM(is_pickup_mismatch) AS pickup_mismatch_rides,
-        ROUND(100.0 * SUM(is_pickup_mismatch) / NULLIF(COUNT(*), 0), 2) AS pct_pickup_mismatch
+        ROUND(100.0 * SUM(is_pickup_mismatch) / NULLIF(COUNT(*), 0), 2) AS pct_pickup_mismatch,
+        SUM(is_surge_mismatch) AS surge_mismatch_rides,
+        ROUND(100.0 * SUM(is_surge_mismatch) / NULLIF(COUNT(*), 0), 2) AS pct_surge_mismatch,
+        SUM(is_pd_mismatch) AS pd_mismatch_rides,
+        ROUND(100.0 * SUM(is_pd_mismatch) / NULLIF(COUNT(*), 0), 2) AS pct_pd_mismatch
     FROM Classified
     GROUP BY 1, 2, 3
 ),
@@ -182,8 +212,12 @@ CountryAvg7 AS (
         ROUND(AVG(pct_increase_pricing), 2) AS avg7_pct_increase_pricing,
         ROUND(AVG(surcharge_mismatch_rides), 1) AS avg7_surcharge_mismatch_rides,
         ROUND(AVG(pickup_mismatch_rides), 1) AS avg7_pickup_mismatch_rides,
+        ROUND(AVG(surge_mismatch_rides), 1) AS avg7_surge_mismatch_rides,
+        ROUND(AVG(pd_mismatch_rides), 1) AS avg7_pd_mismatch_rides,
         ROUND(AVG(pct_surcharge_mismatch), 2) AS avg7_pct_surcharge_mismatch,
-        ROUND(AVG(pct_pickup_mismatch), 2) AS avg7_pct_pickup_mismatch
+        ROUND(AVG(pct_pickup_mismatch), 2) AS avg7_pct_pickup_mismatch,
+        ROUND(AVG(pct_surge_mismatch), 2) AS avg7_pct_surge_mismatch,
+        ROUND(AVG(pct_pd_mismatch), 2) AS avg7_pct_pd_mismatch
     FROM DailyCountry CROSS JOIN params p
     WHERE createddate BETWEEN p.avg7_start AND p.avg7_end
     GROUP BY 1
@@ -208,8 +242,12 @@ CityAvg7 AS (
         ROUND(AVG(pct_increase_pricing), 2) AS avg7_pct_increase_pricing,
         ROUND(AVG(surcharge_mismatch_rides), 1) AS avg7_surcharge_mismatch_rides,
         ROUND(AVG(pickup_mismatch_rides), 1) AS avg7_pickup_mismatch_rides,
+        ROUND(AVG(surge_mismatch_rides), 1) AS avg7_surge_mismatch_rides,
+        ROUND(AVG(pd_mismatch_rides), 1) AS avg7_pd_mismatch_rides,
         ROUND(AVG(pct_surcharge_mismatch), 2) AS avg7_pct_surcharge_mismatch,
-        ROUND(AVG(pct_pickup_mismatch), 2) AS avg7_pct_pickup_mismatch
+        ROUND(AVG(pct_pickup_mismatch), 2) AS avg7_pct_pickup_mismatch,
+        ROUND(AVG(pct_surge_mismatch), 2) AS avg7_pct_surge_mismatch,
+        ROUND(AVG(pct_pd_mismatch), 2) AS avg7_pct_pd_mismatch
     FROM DailyCity CROSS JOIN params p
     WHERE createddate BETWEEN p.avg7_start AND p.avg7_end
     GROUP BY 1, 2
@@ -240,7 +278,21 @@ SELECT
     ROUND(y.pickup_mismatch_rides - w.pickup_mismatch_rides, 0) AS wow_delta_pickup_mismatch,
     ROUND(y.pickup_mismatch_rides - m.pickup_mismatch_rides, 0) AS mom_delta_pickup_mismatch,
     a.avg7_pickup_mismatch_rides,
-    IFF(y.pickup_mismatch_rides > a.avg7_pickup_mismatch_rides, TRUE, FALSE) AS major_shift_pickup_mismatch
+    IFF(y.pickup_mismatch_rides > a.avg7_pickup_mismatch_rides, TRUE, FALSE) AS major_shift_pickup_mismatch,
+    y.surge_mismatch_rides,
+    y.pct_surge_mismatch,
+    ROUND(y.surge_mismatch_rides - d.surge_mismatch_rides, 0) AS dod_delta_surge_mismatch,
+    ROUND(y.surge_mismatch_rides - w.surge_mismatch_rides, 0) AS wow_delta_surge_mismatch,
+    ROUND(y.surge_mismatch_rides - m.surge_mismatch_rides, 0) AS mom_delta_surge_mismatch,
+    a.avg7_surge_mismatch_rides,
+    IFF(y.surge_mismatch_rides > a.avg7_surge_mismatch_rides, TRUE, FALSE) AS major_shift_surge_mismatch,
+    y.pd_mismatch_rides,
+    y.pct_pd_mismatch,
+    ROUND(y.pd_mismatch_rides - d.pd_mismatch_rides, 0) AS dod_delta_pd_mismatch,
+    ROUND(y.pd_mismatch_rides - w.pd_mismatch_rides, 0) AS wow_delta_pd_mismatch,
+    ROUND(y.pd_mismatch_rides - m.pd_mismatch_rides, 0) AS mom_delta_pd_mismatch,
+    a.avg7_pd_mismatch_rides,
+    IFF(y.pd_mismatch_rides > a.avg7_pd_mismatch_rides, TRUE, FALSE) AS major_shift_pd_mismatch
 FROM CountryYesterday y
 LEFT JOIN CountryDoD d ON y.country = d.country
 LEFT JOIN CountryWoW w ON y.country = w.country
@@ -274,7 +326,21 @@ SELECT
     ROUND(y.pickup_mismatch_rides - w.pickup_mismatch_rides, 0) AS wow_delta_pickup_mismatch,
     ROUND(y.pickup_mismatch_rides - m.pickup_mismatch_rides, 0) AS mom_delta_pickup_mismatch,
     a.avg7_pickup_mismatch_rides,
-    IFF(y.pickup_mismatch_rides > a.avg7_pickup_mismatch_rides, TRUE, FALSE) AS major_shift_pickup_mismatch
+    IFF(y.pickup_mismatch_rides > a.avg7_pickup_mismatch_rides, TRUE, FALSE) AS major_shift_pickup_mismatch,
+    y.surge_mismatch_rides,
+    y.pct_surge_mismatch,
+    ROUND(y.surge_mismatch_rides - d.surge_mismatch_rides, 0) AS dod_delta_surge_mismatch,
+    ROUND(y.surge_mismatch_rides - w.surge_mismatch_rides, 0) AS wow_delta_surge_mismatch,
+    ROUND(y.surge_mismatch_rides - m.surge_mismatch_rides, 0) AS mom_delta_surge_mismatch,
+    a.avg7_surge_mismatch_rides,
+    IFF(y.surge_mismatch_rides > a.avg7_surge_mismatch_rides, TRUE, FALSE) AS major_shift_surge_mismatch,
+    y.pd_mismatch_rides,
+    y.pct_pd_mismatch,
+    ROUND(y.pd_mismatch_rides - d.pd_mismatch_rides, 0) AS dod_delta_pd_mismatch,
+    ROUND(y.pd_mismatch_rides - w.pd_mismatch_rides, 0) AS wow_delta_pd_mismatch,
+    ROUND(y.pd_mismatch_rides - m.pd_mismatch_rides, 0) AS mom_delta_pd_mismatch,
+    a.avg7_pd_mismatch_rides,
+    IFF(y.pd_mismatch_rides > a.avg7_pd_mismatch_rides, TRUE, FALSE) AS major_shift_pd_mismatch
 FROM CityYesterday y
 LEFT JOIN CityDoD d ON y.country = d.country AND y.city_bucket = d.city_bucket
 LEFT JOIN CityWoW w ON y.country = w.country AND y.city_bucket = w.city_bucket

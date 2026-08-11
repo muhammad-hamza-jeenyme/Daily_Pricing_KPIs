@@ -16,7 +16,10 @@ Grain for digests: **day × AREA_CODE × UPFRONTSCENARIO × issue-type**, last *
 
 - Destination selected → else re-Google; dropoff at destination → else re-Google.
 - `UPFRONTSCENARIO` casing in Snowflake: `withinA` | `withinB` | `beyondB` (only these three when destination was selected).
-- **withinA**: actual time inside ±A of applied estimate. Lower A is usually **0**, so finishing early → withinA.
+- **withinA** when **either**:
+  1. Actual time is inside the A band: `ACTUALTIME * 60 ∈ [TIMETHRESHHOLDSALOWVALUE, TIMETHRESHHOLDSAHIGHVALUE]` (VALUE cols are seconds), **or**
+  2. `ACTUALTIME − APPLIEDESTIMATETIME ≤ MAXWITHINMINUTESVARIANCE` (all **minutes** — max WithinA allowance).
+  A-low is often **0**, so finishing early usually stays withinA via (1).
 - **withinB**: outside A but inside B.
 - **beyondB**: outside B — rare; B upper bound very high (`TIMETHRESHHOLDSBHIGHPERCENTAGE`). Often round-trip / dropoff ≠ dest where new Google duration ≈ 0.
 - Path labels (not scenario): `ad_less_ed` = taximeter/actual distance < estimated distance; speed out of limit → **scaled distance** (GPS-spoofing assumption).
@@ -29,14 +32,15 @@ Grain for digests: **day × AREA_CODE × UPFRONTSCENARIO × issue-type**, last *
 | Speed in limit | Taximeter distance | same |
 | Speed beyond limit | **Scaled distance** | same |
 
-`ScaledDistance = ActualTime × FixSpeedCap`  
-`FixSpeedCap` not in Snowflake yet; monitor rides with `SCALEDDISTANCE > 0` by city (rare).
+`ScaledDistance = ActualTime × FIXEDSPEEDCAP`  
+`FIXEDSPEEDCAP` = speed used to calculate `SCALEDDISTANCE` from `ACTUALTIME` when scaled distance applies (now in `RIDE.UPFRONT`). Monitor rides with `SCALEDDISTANCE > 0` by city (rare).
 
 ### Time thresholds (units)
 
-- `ACTUALTIME`, `APPLIEDESTIMATETIME` → **minutes**
+- `ACTUALTIME`, `APPLIEDESTIMATETIME`, `MAXWITHINMINUTESVARIANCE` → **minutes**
 - `TIMETHRESHHOLDSA/B*VALUE` → **seconds**
 - Percent columns are **percent points** (e.g. `22` = +22%)
+- `FIXEDSPEEDCAP` → speed used with `ACTUALTIME` for scaled distance
 
 Validated form (sample):
 
@@ -121,4 +125,5 @@ Daily SQL: `sql/fare_integrity_daily_digest.sql` (aggregate). Ride-level check: 
 
 ## Still open
 
-None blocking v1 SQL. Optional later: MinFare column in BI; FixSpeedCap column; PriceCheck discounts; alert % thresholds for Slack.
+None blocking v1 SQL. Optional later: MinFare column in BI; PriceCheck discounts; alert % thresholds for Slack.  
+Resolved: `FIXEDSPEEDCAP` and `MAXWITHINMINUTESVARIANCE` now on `RIDE.UPFRONT` (2026-08).
