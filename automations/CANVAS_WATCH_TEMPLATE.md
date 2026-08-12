@@ -26,7 +26,8 @@ Style reference (dated sections stacked): VoC-style canvas with newest day on to
 
 ### :flag-sa: Saudi Arabia — X watches
 
-#### :eyes: Watch
+**Watch**  
+(Slack Canvas markdown supports heading depth ≤ 3 only — do **not** use `####`.)
 
 `RUH`
 
@@ -50,7 +51,7 @@ Style reference (dated sections stacked): VoC-style canvas with newest day on to
     * d/d … · w/w … · m/m …
     * :mag: PC.DISCRIMINATIONMULTIPLIER ≠ Details.DISCRIMINATIONMULTIPLIER.
 
-#### :rotating_light: Alerts
+**Alerts**
 
 (Only if yesterday > prior 7d avg)
 

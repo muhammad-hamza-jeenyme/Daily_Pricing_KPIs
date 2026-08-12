@@ -32,10 +32,11 @@ Optional detail for majors: `sql/fare_integrity_slack_rollup.sql`
 ### 2) Update Canvas `F0BN0E7RJ31` (prepend — keep history)
 Follow `automations/CANVAS_WATCH_TEMPLATE.md`.
 
-1. Read existing canvas body.
-2. Prepend **today’s dated section** at the top.
+1. Read existing canvas body (`canvases.sections.lookup`).
+2. Prepend **today’s dated section** at the top (`canvases.edit` → `insert_at_start`).
 3. Leave all previous days’ sections intact below (scroll for history).
 4. Do **not** replace the whole canvas with only today.
+5. Canvas markdown heading depth max **h3** (`####` → `canvas_editing_failed`).
 
 Include watches for: fare-increase %, surcharge, pickup, surge, PD mismatch.
 
