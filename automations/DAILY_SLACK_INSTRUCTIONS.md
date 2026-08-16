@@ -34,8 +34,10 @@ Follow `automations/SLACK_MESSAGE_TEMPLATE.md` exactly.
 - SA then JO
 - Header only (`:flag-sa: *SA Fare Integrity (date | weekday)*`) then **tables** — **no** prose KPI blocks before tables
 - Table order: Cumulative PriceShocks → Residual fare increase → Rounding → Surcharge → Pickup → Surge → PD
-- Every table: rows `%inc` | `DoD` | `WoW` | `MoM`; SA cols `RUH|JED|MAD|DMM|MEC|Others|Total`; JO `AMM|IRB|ZRQ|Others|Total`
-- Fixed-width monospace alignment; Total = country rate/delta
+- Every table: rows `%inc` | `DoD` | `WoW` | `MoM`
+- SA cols `RUH|JED|MAD|DMM|MEC|Others|Total`; JO cols **`AMM|IRB|ZRQ|Others|Total` only** (never reuse SA headers)
+- Fixed-width monospace; each table in its own code fence; Total = country rate/delta
+- **JO must match SA formatting quality** — see JO worked example in `automations/SLACK_MESSAGE_TEMPLATE.md`
 - Footer: canvas link
 - Optional `:warning:` on a **table title** only if that KPI’s country Total `%inc` > prior 7d avg (`major_shift_*` / `avg7_*`)
 

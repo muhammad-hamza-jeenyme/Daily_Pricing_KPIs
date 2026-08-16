@@ -3,35 +3,58 @@
 **No prose before tables.** Country header + table title + monospace table only.  
 Footer: canvas link once at the end.
 
-## Channel KPI tables (this order)
+Post **SA first, then JO**. Format JO with the **same care as SA**.
 
-1. **Cumulative PriceShocks %** — `Fare_Diff > 0.01` (waiting, cancel, additional time, residual pricing, tech bugs). **Excludes** rounding (`|Fare_Diff| ≤ 0.01`).
-2. **Residual fare increase %** — `increase_pricing` only (`Fare_Diff > 0.01` AND residual after waiting/cancel `> 0.01`).
-3. **Rounding error %** — `0 < |Fare_Diff| ≤ 0.01` (tech bug / penny noise).
-4. **Surcharge mismatch %** — withinA + dropoff at dest, PC vs Details surcharge.
-5. **Pickup mismatch %** — PC pickup vs `ride_offered` > 100m.
-6. **Surge mismatch %** — `ROUND(PC.SURGEMULTIPLIER,4) <> ROUND(Details.SURGEMULTIPLIER,4)`.
-7. **PD mismatch %** — `ROUND(PC.DISCRIMINATIONMULTIPLIER,4) <> ROUND(Details.DISCRIMINATIONMULTIPLIER,4)`.
+JO distortion usually comes from: (1) reusing SA city headers, (2) uneven padding, (3) unclosed / nested code fences after the long SA block. Avoid all three.
 
-## Table formatting (required)
+## Channel KPI tables (this order, both countries)
 
-- Slack code fence (monospace); **fixed-width** padded cells.
-- SA columns: `RUH | JED | MAD | DMM | MEC | Others | Total`
-- JO columns: `AMM | IRB | ZRQ | Others | Total`
-- **Exactly 4 data rows** on every table:
-  - `%inc` — yesterday rate (%)
-  - `DoD` — pp vs day-before
-  - `WoW` — pp vs 7 days earlier
-  - `MoM` — pp vs 28 days earlier
-- **Total** = country-level rate / delta (not average of city %).
-- Right-align numbers. Suggested widths: label `6`, cities `6`, Others `7`, Total `7`.
+1. Cumulative PriceShocks %
+2. Residual fare increase %
+3. Rounding error %
+4. Surcharge mismatch %
+5. Pickup mismatch %
+6. Surge mismatch %
+7. PD mismatch %
 
-## Example shape (SA) — no blocks above the first table
+## Table formatting (required — SA and JO)
 
-```text
-:flag-sa: *SA Fare Integrity (August 10, 2026 | Monday)*
+- Each table body is inside its **own** Slack ` ``` ` code fence. Close the fence before the next `*Title:*` line.
+- Fixed-width cells; pad with spaces so every `|` aligns vertically.
+- Right-align numbers.
+- Exactly 4 data rows: `%inc` | `DoD` | `WoW` | `MoM`
+- **Total** = SQL `grain=country` rate/delta (not average of cities).
+- Cell widths: label `6`, each city `6`, Others `7`, Total `7`.
 
-*Cumulative PriceShocks %:*
+### Headers (copy exactly)
+
+SA:
+
+```
+City   |  RUH  |  JED  |  MAD  |  DMM  |  MEC  | Others |  Total
+-------|-------|-------|-------|-------|-------|--------|-------
+```
+
+JO (5 value columns — never SA cities):
+
+```
+City   |  AMM  |  IRB  |  ZRQ  | Others |  Total
+-------|-------|-------|-------|--------|-------
+```
+
+### JO hard rules
+
+- Header must be `AMM | IRB | ZRQ | Others | Total` only.
+- Same 4 rows and padding discipline as SA.
+- After SA’s last table fence closes, start JO with a fresh `:flag-jo:` header (do not leave JO inside an open SA fence).
+- Missing city bucket in SQL → still print the column as `0.0` / `+0.0` so the grid stays intact.
+- Before send: verify every JO table has **6 pipes per row** (label + 5 values) and aligned columns.
+
+## SA table body example (one KPI)
+
+Title line (outside fence): `*Cumulative PriceShocks %:*`  
+Then fence:
+
 ```
 City   |  RUH  |  JED  |  MAD  |  DMM  |  MEC  | Others |  Total
 -------|-------|-------|-------|-------|-------|--------|-------
@@ -41,59 +64,70 @@ WoW    |  -0.4 |  +0.2 |  +0.1 |  -0.3 |  +0.0 |   -0.1 |   -0.1
 MoM    |  -1.2 |  -0.8 |  -0.5 |  -1.0 |  -0.9 |   -0.7 |   -0.9
 ```
 
-*Residual fare increase %:*
+Repeat that SA grid for all 7 KPIs under:
+
+`:flag-sa: *SA Fare Integrity (Month DD, YYYY | Weekday)*`
+
+## JO table body examples (required — match this padding)
+
+Country header (outside fences):
+
+`:flag-jo: *JO Fare Integrity (Month DD, YYYY | Weekday)*`
+
+### Cumulative PriceShocks %
+
 ```
-City   |  RUH  |  JED  |  MAD  |  DMM  |  MEC  | Others |  Total
--------|-------|-------|-------|-------|-------|--------|-------
-%inc   |  14.1 |  18.8 |  16.8 |  18.3 |  19.2 |   20.6 |   17.0
-DoD    |  +1.6 |  +0.4 |  -0.4 |  +1.6 |  +1.5 |   +1.5 |   +1.0
-WoW    |  +0.5 |  +0.2 |  -0.1 |  +0.4 |  +0.3 |   +0.6 |   +0.4
-MoM    |  -0.8 |  -0.3 |  -0.5 |  -0.2 |  -0.4 |   -0.1 |   -0.6
+City   |  AMM  |  IRB  |  ZRQ  | Others |  Total
+-------|-------|-------|-------|--------|-------
+%inc   |  28.4 |  31.2 |  29.0 |   27.5 |   28.9
+DoD    |  +0.4 |  +0.6 |  -0.1 |   +0.2 |   +0.3
+WoW    |  -0.2 |  +0.1 |  +0.0 |   -0.3 |   -0.1
+MoM    |  -0.9 |  -0.7 |  -0.5 |   -0.8 |   -0.8
 ```
 
-*Rounding error % (|Δ|≤0.01):*
+### Residual fare increase %
+
 ```
-City   |  RUH  |  JED  |  MAD  |  DMM  |  MEC  | Others |  Total
--------|-------|-------|-------|-------|-------|--------|-------
-%inc   |   1.2 |   1.5 |   1.1 |   1.3 |   1.4 |    1.0 |    1.3
-DoD    |  +0.1 |  +0.0 |  -0.1 |  +0.2 |  +0.0 |   +0.1 |   +0.1
-WoW    |  +0.0 |  -0.1 |  +0.0 |  +0.1 |  -0.1 |   +0.0 |   +0.0
-MoM    |  -0.2 |  -0.1 |  -0.1 |  -0.2 |  -0.1 |   -0.2 |   -0.2
+City   |  AMM  |  IRB  |  ZRQ  | Others |  Total
+-------|-------|-------|-------|--------|-------
+%inc   |  12.1 |  14.5 |  13.0 |   11.8 |   12.6
+DoD    |  +0.3 |  +0.5 |  -0.2 |   +0.1 |   +0.2
+WoW    |  +0.1 |  +0.0 |  -0.1 |   +0.2 |   +0.1
+MoM    |  -0.6 |  -0.4 |  -0.3 |   -0.5 |   -0.5
 ```
 
-*Surcharge mismatch %:*
+### Rounding error % (|Δ|≤0.01)
+
 ```
-City   |  RUH  |  JED  |  MAD  |  DMM  |  MEC  | Others |  Total
--------|-------|-------|-------|-------|-------|--------|-------
-%inc   |   … |   … |   … |   … |   … |    … |    …
-DoD    |   … |   … |   … |   … |   … |    … |    …
-WoW    |   … |   … |   … |   … |   … |    … |    …
-MoM    |   … |   … |   … |   … |   … |    … |    …
+City   |  AMM  |  IRB  |  ZRQ  | Others |  Total
+-------|-------|-------|-------|--------|-------
+%inc   |   0.9 |   1.1 |   1.0 |    0.8 |    0.9
+DoD    |  +0.0 |  +0.1 |  -0.1 |   +0.0 |   +0.0
+WoW    |  +0.0 |  -0.1 |  +0.0 |   +0.0 |   +0.0
+MoM    |  -0.1 |  -0.1 |  -0.1 |   -0.2 |   -0.1
 ```
 
-*Pickup mismatch %:*
+### Surcharge / Pickup / Surge / PD mismatch %
+
+Same JO header + 4 rows (`%inc`/`DoD`/`WoW`/`MoM`). Example surcharge:
+
 ```
-…same 4-row shape…
+City   |  AMM  |  IRB  |  ZRQ  | Others |  Total
+-------|-------|-------|-------|--------|-------
+%inc   |   0.4 |   0.6 |   0.3 |    0.5 |    0.4
+DoD    |  +0.0 |  +0.1 |  -0.1 |   +0.0 |   +0.0
+WoW    |  -0.1 |  +0.0 |  +0.0 |   -0.1 |   -0.1
+MoM    |  -0.2 |  -0.1 |  -0.1 |   -0.2 |   -0.2
 ```
 
-*Surge mismatch %:*
-```
-…same 4-row shape…
-```
+After JO’s last table, footer once:
 
-*PD mismatch %:*
-```
-…same 4-row shape…
-```
-
-:flag-jo: *JO Fare Integrity (…)*  
-(same table set; cities AMM | IRB | ZRQ | Others | Total)
-
-:clipboard: *Watches (last 3 runs):* https://easytaxime.slack.com/docs/T33U3F6CW/F0BN0E7RJ31
-```
+`:clipboard: *Watches (last 3 runs):* https://easytaxime.slack.com/docs/T33U3F6CW/F0BN0E7RJ31`
 
 ## Rules
-- Do **not** post country prose blocks (no “X% · DoD … · Rides …” above tables).
+
+- Do **not** post country prose blocks above tables.
 - Flag `:warning:` on a **table title** only when that KPI’s country Total `%inc` > prior 7d avg.
 - SQL: `sql/fare_integrity_channel_summary.sql`
 - Never invent numbers — pad/format only what Snowflake returns.
+- **JO quality check before send:** 5 value columns, 4 data rows, closed fences, pipes aligned like the JO examples above.
