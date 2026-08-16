@@ -2,79 +2,76 @@
 
 **Use existing automation only** (Pricing KPI Alerts Slack). Do not create a new one.
 
-## Goal
-Daily **11:00 AM PKT**: Snowflake → **short Pulsar channel message** + **prepend** today’s section on Canvas `F0BN0E7RJ31` (keep older days).
+Paste this entire file into the automation **Instructions**. Repo source of truth: `muhammad-hamza-jeenyme/Daily_Pricing_KPIs` @ `main`.
 
-## Repo
-`muhammad-hamza-jeenyme/Daily_Pricing_KPIs` @ `main`.
+## Goal
+Daily **11:00 AM PKT** (`0 6 * * *` UTC): run Snowflake → post **tables-only** Pulsar channel message → update Canvas `F0BN0E7RJ31` (3 runs max, exceptions-only).
 
 ## Tools / secrets
 - Snowflake MCP
-- `PULSAR_SLACK_WEBHOOK_URL` — channel post
-- `PULSAR_SLACK_BOT_TOKEN` — canvas update (`canvases:read` + `canvases:write`; reinstall app after adding scopes)
-- Fixed canvas: `F0BN0E7RJ31` — https://easytaxime.slack.com/docs/T33U3F6CW/F0BN0E7RJ31  
-  (**not** a secret)
+- `PULSAR_SLACK_WEBHOOK_URL` — channel post as Pulsar
+- `PULSAR_SLACK_BOT_TOKEN` — canvas (`canvases:read` + `canvases:write`)
+- Canvas ID `F0BN0E7RJ31` (https://easytaxime.slack.com/docs/T33U3F6CW/F0BN0E7RJ31) — **not** a secret
 
-## Steps each run
+## Step 1 — SQL
+Run `sql/fare_integrity_channel_summary.sql` from repo `main`.
 
-### 1) Main SQL (channel + canvas metrics)
-Run `sql/fare_integrity_channel_summary.sql`  
-Returns country + city/Others for yesterday with DoD/WoW/MoM / vs7d:
+Use rows `grain=country` and `grain=city` for report date. Key fields:
 
-- `pct_increase_pricing` (+ deltas) — **`increase_pricing` only**
-- `surcharge_mismatch_rides` / `pct_surcharge_mismatch` (+ deltas, major_shift flag)
-- `pickup_mismatch_rides` / `pct_pickup_mismatch` (+ deltas, major_shift flag)
-- `surge_mismatch_rides` / `pct_surge_mismatch` (+ deltas, major_shift flag)
-- `pd_mismatch_rides` / `pct_pd_mismatch` (+ deltas, major_shift flag)
+| Field | Use |
+|-------|-----|
+| `pct_cumulative_shock` + DoD/WoW/MoM deltas | Cumulative PriceShocks % table |
+| `pct_increase_pricing` + deltas | Residual fare increase % table |
+| `pct_rounding` + deltas | Rounding error % table |
+| `pct_*_mismatch` + deltas | Surcharge / Pickup / Surge / PD tables |
+| `exception_28d_2sd_*` | Canvas exceptions (country + city) |
+| `cum_trend_t1/t2`, `res_trend_t1/t2` | Country trend strip (with today’s pct as t0) |
 
-Optional detail for majors: `sql/fare_integrity_slack_rollup.sql`
+## Step 2 — Channel message (Pulsar webhook)
+Follow `automations/SLACK_MESSAGE_TEMPLATE.md` exactly.
 
-### 2) Update Canvas `F0BN0E7RJ31` (prepend — keep history)
+**Must:**
+- SA then JO
+- Header only (`:flag-sa: *SA Fare Integrity (date | weekday)*`) then **tables** — **no** prose KPI blocks before tables
+- Table order: Cumulative PriceShocks → Residual fare increase → Rounding → Surcharge → Pickup → Surge → PD
+- Every table: rows `%inc` | `DoD` | `WoW` | `MoM`; SA cols `RUH|JED|MAD|DMM|MEC|Others|Total`; JO `AMM|IRB|ZRQ|Others|Total`
+- Fixed-width monospace alignment; Total = country rate/delta
+- Footer: canvas link
+- Optional `:warning:` on a **table title** only if that KPI’s country Total `%inc` > prior 7d avg (`major_shift_*` / `avg7_*`)
+
+## Step 3 — Canvas `F0BN0E7RJ31`
 Follow `automations/CANVAS_WATCH_TEMPLATE.md`.
 
-1. Read existing canvas body.
-2. Prepend **today’s dated section** at the top.
-3. Leave all previous days’ sections intact below (scroll for history).
-4. Do **not** replace the whole canvas with only today.
+**Must:**
+1. Read existing canvas body
+2. Prepend today’s compact section
+3. Keep only **newest 3** dated sections; delete older
+4. **Exceptions only** where `exception_28d_2sd_* = TRUE` (rate > 28d avg + 2× sample σ)
+5. **Trend strip** — country Total Cumulative + Residual for last 3 runs (`t2 → t1 → **t0**`)
+6. **Investigate today** — 1–2 concrete leads (city + KPI + why), or quiet-day line
+7. **No** definitions, essays, or full matrices on canvas
 
-Include watches for: fare-increase %, surcharge, pickup, surge, PD mismatch.
-
-### 3) Post short Slack message (Pulsar webhook)
-Follow `automations/SLACK_MESSAGE_TEMPLATE.md`:
-
-- SA / JO: fare-increase % + surcharge + pickup + surge + PD mismatch
-- City-wise tables (majors + Others + **Total**) for each — **fixed-width monospace alignment**
-- Footer: canvas link
-
-### 4) Failures
-Snowflake fail → one webhook line.  
-Canvas fail → still post channel summary; note canvas error in one line (e.g. missing_scope).
+## Step 4 — Failures
+- Snowflake fail → one webhook error line
+- Canvas fail → still post channel tables; one-line canvas error note
 
 ## Definitions (do not invent)
 
-**% rides with fare increase**  
-Share of rides where `issue_type = increase_pricing`:  
-`Fare_Diff > 0.01` **and** residual after waiting/cancel `> 0.01`.  
-Does **not** include `increase_non_issue` (waiting / prior cancel fine).  
-Does **not** equal “all cases charged > quote.”
+**Cumulative PriceShocks %** — `Fare_Diff > 0.01` (any reason: waiting, cancel fine, additional time, residual pricing, tech bugs). **Excludes** rounding.
 
-**Surcharge mismatch**  
-`lower(upfrontscenario)='withina'` AND dropoff at destination  
-AND `ROUND(rd.SURCHARGE + rd.INTERCITYSURCHARGE, 2) != ROUND(pc.SURCHARGE, 2)`
+**Residual fare increase %** — `increase_pricing`: `Fare_Diff > 0.01` AND residual after waiting/cancel `> 0.01`.
 
-**Pickup mismatch**  
-PriceCheck pickup lat/long vs first `ride.eventhistory` `ride_offered` location  
-`ST_DISTANCE(TO_GEOGRAPHY(...), TO_GEOGRAPHY(...)) > 100` (meters)
+**Rounding error %** — `0 < |Fare_Diff| ≤ 0.01` (tech bug). Not in Cumulative.
 
-**Surge mismatch**  
-Both multipliers non-null AND `ROUND(pc.SURGEMULTIPLIER, 4) <> ROUND(rd.SURGEMULTIPLIER, 4)`  
-(Do not coalesce NULL → 0.)
+**Surcharge mismatch** — withinA + dropoff at dest AND `ROUND(rd.SURCHARGE+rd.INTERCITYSURCHARGE,2) != ROUND(pc.SURCHARGE,2)`.
 
-**PD mismatch**  
-Both multipliers non-null AND `ROUND(pc.DISCRIMINATIONMULTIPLIER, 4) <> ROUND(rd.DISCRIMINATIONMULTIPLIER, 4)`  
-(Do not coalesce NULL → 0.)
+**Pickup mismatch** — PC pickup vs first `ride_offered` distance > 100m.
+
+**Surge / PD mismatch** — both multipliers non-null AND rounded values differ (4 dp). Do not coalesce NULL→0.
+
+**Canvas exception** — `yesterday > avg28 + 2*sd28` (28 days ending day before report date).
 
 ## Hard constraints
-- Existing automation only; schedule **11:00 AM PKT** (`0 6 * * *` UTC).
-- Never log webhook URL / PAT / bot token.
-- Channel stays short; detail on canvas; canvas retains multi-day history.
+- Existing automation only; do not create a new automation
+- Never log webhook URL / PAT / bot token
+- Channel = tables; canvas = 3-run exception digest only

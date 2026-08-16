@@ -1,25 +1,30 @@
--- Channel summary: % fare increase + surcharge / pickup / surge / PD mismatch
+-- Channel summary: cumulative price shocks, residual fare increase, rounding,
+-- surcharge / pickup / surge / PD mismatch
 -- Country + major cities + Others (SA/JO)
 -- Major SA: RUH, JED, MAD, DMM, MEC | Major JO: AMM, IRB, ZRQ
 -- Spec: docs/alert-rules.md | automations/DAILY_SLACK_INSTRUCTIONS.md
 --
--- % fare increase = increase_pricing only (Fare_Diff > 0.01 AND Residual > 0.01).
---   Does NOT include increase_non_issue (waiting/cancel).
+-- Cumulative price shocks % = Fare_Diff > 0.01 (any reason: waiting, cancel,
+--   additional time, residual pricing, tech bugs). EXCLUDES rounding.
+-- Residual fare increase % = increase_pricing only (Fare_Diff > 0.01 AND Residual > 0.01).
+-- Rounding % = 0 < ABS(Fare_Diff) <= 0.01 (tech bug / penny noise).
 -- Surcharge mismatch: withinA + dropoff at destination AND
 --   (Details.SURCHARGE + Details.INTERCITYSURCHARGE) != PriceChecks.SURCHARGE
 -- Pickup mismatch: PriceCheck pickup vs first ride_offered location > 100m
--- Surge mismatch: ROUND(PC.SURGEMULTIPLIER,4) <> ROUND(Details.SURGEMULTIPLIER,4)
--- PD mismatch: ROUND(PC.DISCRIMINATIONMULTIPLIER,4) <> ROUND(Details.DISCRIMINATIONMULTIPLIER,4)
---   (do NOT coalesce multipliers to 0 — NULL vs value is not a mismatch)
+-- Surge / PD mismatch: ROUND(PC.*,4) <> ROUND(Details.*,4); both non-null
 
 WITH params AS (
     SELECT
         DATEADD('day', -1, CURRENT_DATE()) AS report_date,
         DATEADD('day', -2, CURRENT_DATE()) AS dod_date,
+        DATEADD('day', -3, CURRENT_DATE()) AS trend_t2_date,
         DATEADD('day', -8, CURRENT_DATE()) AS wow_date,
         DATEADD('day', -29, CURRENT_DATE()) AS mom_date,
         DATEADD('day', -8, CURRENT_DATE()) AS avg7_start,
         DATEADD('day', -2, CURRENT_DATE()) AS avg7_end,
+        /* 28 complete days ending day before report_date (excludes report day) */
+        DATEADD('day', -29, CURRENT_DATE()) AS avg28_start,
+        DATEADD('day', -2, CURRENT_DATE()) AS avg28_end,
         DATEADD('day', -29, CURRENT_DATE()) AS win_start,
         CURRENT_DATE() AS win_end
 ),
@@ -103,6 +108,24 @@ Classified AS (
         b.country,
         b.city_bucket,
         b.rideid,
+        ROUND(
+            (b.rr_total + b.rr_discount + b.rr_vatdiscount)
+            - (b.pc_value + b.pc_vat_hailing + b.pc_surcharge_gross), 2
+        ) AS fare_diff,
+        ROUND(
+            (b.rr_total + b.rr_discount + b.rr_vatdiscount)
+            - (b.pc_value + b.pc_vat_hailing + b.pc_surcharge_gross)
+            - (b.rr_cancelfine + b.rr_vatcancelfine + b.rr_waitingcharges + b.rr_vatwaitingcharges), 2
+        ) AS residual,
+        /* Cumulative price shock: any Fare_Diff > 0.01 (excludes rounding) */
+        CASE
+            WHEN ROUND(
+                (b.rr_total + b.rr_discount + b.rr_vatdiscount)
+                - (b.pc_value + b.pc_vat_hailing + b.pc_surcharge_gross), 2
+            ) > 0.01
+            THEN 1 ELSE 0
+        END AS is_cumulative_price_shock,
+        /* Residual pricing increase (excludes waiting/cancel-explained) */
         CASE
             WHEN ROUND(
                 (b.rr_total + b.rr_discount + b.rr_vatdiscount)
@@ -115,7 +138,18 @@ Classified AS (
              ) > 0.01
             THEN 1 ELSE 0
         END AS is_increase_pricing,
-        /* Surcharge mismatch: withinA + dropoff at dest, ex-VAT compare per SME draft */
+        /* Rounding tech bug: 0 < |Fare_Diff| <= 0.01 */
+        CASE
+            WHEN ABS(ROUND(
+                (b.rr_total + b.rr_discount + b.rr_vatdiscount)
+                - (b.pc_value + b.pc_vat_hailing + b.pc_surcharge_gross), 2
+            )) > 0
+             AND ABS(ROUND(
+                (b.rr_total + b.rr_discount + b.rr_vatdiscount)
+                - (b.pc_value + b.pc_vat_hailing + b.pc_surcharge_gross), 2
+            )) <= 0.01
+            THEN 1 ELSE 0
+        END AS is_rounding,
         CASE
             WHEN LOWER(b.upfrontscenario) = 'withina'
              AND LOWER(TO_VARCHAR(b.dropoffatdestination)) = 'true'
@@ -123,7 +157,6 @@ Classified AS (
                  != ROUND(b.pc_surcharge_ex_vat, 2)
             THEN 1 ELSE 0
         END AS is_surcharge_mismatch,
-        /* Pickup mismatch: PC pickup vs first ride_offered > 100m */
         CASE
             WHEN b.pickuplat IS NOT NULL
              AND b.pickuplong IS NOT NULL
@@ -137,14 +170,12 @@ Classified AS (
                  ) > 100
             THEN 1 ELSE 0
         END AS is_pickup_mismatch,
-        /* Surge mismatch — both sides non-null; do not coalesce to 0 */
         CASE
             WHEN b.pc_surge IS NOT NULL
              AND b.rd_surge IS NOT NULL
              AND ROUND(b.pc_surge, 4) <> ROUND(b.rd_surge, 4)
             THEN 1 ELSE 0
         END AS is_surge_mismatch,
-        /* PD mismatch — both sides non-null; do not coalesce to 0 */
         CASE
             WHEN b.pc_pd IS NOT NULL
              AND b.rd_pd IS NOT NULL
@@ -160,8 +191,12 @@ DailyCountry AS (
         createddate,
         country,
         COUNT(*) AS ride_count,
+        SUM(is_cumulative_price_shock) AS cumulative_shock_rides,
+        ROUND(100.0 * SUM(is_cumulative_price_shock) / NULLIF(COUNT(*), 0), 2) AS pct_cumulative_shock,
         SUM(is_increase_pricing) AS increase_pricing_rides,
         ROUND(100.0 * SUM(is_increase_pricing) / NULLIF(COUNT(*), 0), 2) AS pct_increase_pricing,
+        SUM(is_rounding) AS rounding_rides,
+        ROUND(100.0 * SUM(is_rounding) / NULLIF(COUNT(*), 0), 2) AS pct_rounding,
         SUM(is_surcharge_mismatch) AS surcharge_mismatch_rides,
         ROUND(100.0 * SUM(is_surcharge_mismatch) / NULLIF(COUNT(*), 0), 2) AS pct_surcharge_mismatch,
         SUM(is_pickup_mismatch) AS pickup_mismatch_rides,
@@ -180,8 +215,12 @@ DailyCity AS (
         country,
         city_bucket,
         COUNT(*) AS ride_count,
+        SUM(is_cumulative_price_shock) AS cumulative_shock_rides,
+        ROUND(100.0 * SUM(is_cumulative_price_shock) / NULLIF(COUNT(*), 0), 2) AS pct_cumulative_shock,
         SUM(is_increase_pricing) AS increase_pricing_rides,
         ROUND(100.0 * SUM(is_increase_pricing) / NULLIF(COUNT(*), 0), 2) AS pct_increase_pricing,
+        SUM(is_rounding) AS rounding_rides,
+        ROUND(100.0 * SUM(is_rounding) / NULLIF(COUNT(*), 0), 2) AS pct_rounding,
         SUM(is_surcharge_mismatch) AS surcharge_mismatch_rides,
         ROUND(100.0 * SUM(is_surcharge_mismatch) / NULLIF(COUNT(*), 0), 2) AS pct_surcharge_mismatch,
         SUM(is_pickup_mismatch) AS pickup_mismatch_rides,
@@ -209,11 +248,9 @@ CountryMoM AS (
 CountryAvg7 AS (
     SELECT
         country,
+        ROUND(AVG(pct_cumulative_shock), 2) AS avg7_pct_cumulative_shock,
         ROUND(AVG(pct_increase_pricing), 2) AS avg7_pct_increase_pricing,
-        ROUND(AVG(surcharge_mismatch_rides), 1) AS avg7_surcharge_mismatch_rides,
-        ROUND(AVG(pickup_mismatch_rides), 1) AS avg7_pickup_mismatch_rides,
-        ROUND(AVG(surge_mismatch_rides), 1) AS avg7_surge_mismatch_rides,
-        ROUND(AVG(pd_mismatch_rides), 1) AS avg7_pd_mismatch_rides,
+        ROUND(AVG(pct_rounding), 2) AS avg7_pct_rounding,
         ROUND(AVG(pct_surcharge_mismatch), 2) AS avg7_pct_surcharge_mismatch,
         ROUND(AVG(pct_pickup_mismatch), 2) AS avg7_pct_pickup_mismatch,
         ROUND(AVG(pct_surge_mismatch), 2) AS avg7_pct_surge_mismatch,
@@ -221,6 +258,31 @@ CountryAvg7 AS (
     FROM DailyCountry CROSS JOIN params p
     WHERE createddate BETWEEN p.avg7_start AND p.avg7_end
     GROUP BY 1
+),
+/* Canvas exceptions: upper breach vs prior 28d mean + 2*sample stddev */
+CountryAvg28 AS (
+    SELECT
+        country,
+        ROUND(AVG(pct_cumulative_shock), 2) AS avg28_pct_cumulative_shock,
+        ROUND(STDDEV_SAMP(pct_cumulative_shock), 4) AS sd28_pct_cumulative_shock,
+        ROUND(AVG(pct_increase_pricing), 2) AS avg28_pct_increase_pricing,
+        ROUND(STDDEV_SAMP(pct_increase_pricing), 4) AS sd28_pct_increase_pricing,
+        ROUND(AVG(pct_rounding), 2) AS avg28_pct_rounding,
+        ROUND(STDDEV_SAMP(pct_rounding), 4) AS sd28_pct_rounding,
+        ROUND(AVG(pct_surcharge_mismatch), 2) AS avg28_pct_surcharge_mismatch,
+        ROUND(STDDEV_SAMP(pct_surcharge_mismatch), 4) AS sd28_pct_surcharge_mismatch,
+        ROUND(AVG(pct_pickup_mismatch), 2) AS avg28_pct_pickup_mismatch,
+        ROUND(STDDEV_SAMP(pct_pickup_mismatch), 4) AS sd28_pct_pickup_mismatch,
+        ROUND(AVG(pct_surge_mismatch), 2) AS avg28_pct_surge_mismatch,
+        ROUND(STDDEV_SAMP(pct_surge_mismatch), 4) AS sd28_pct_surge_mismatch,
+        ROUND(AVG(pct_pd_mismatch), 2) AS avg28_pct_pd_mismatch,
+        ROUND(STDDEV_SAMP(pct_pd_mismatch), 4) AS sd28_pct_pd_mismatch
+    FROM DailyCountry CROSS JOIN params p
+    WHERE createddate BETWEEN p.avg28_start AND p.avg28_end
+    GROUP BY 1
+),
+CountryTrendT2 AS (
+    SELECT * FROM DailyCountry CROSS JOIN params p WHERE createddate = p.trend_t2_date
 ),
 
 CityYesterday AS (
@@ -239,17 +301,37 @@ CityAvg7 AS (
     SELECT
         country,
         city_bucket,
+        ROUND(AVG(pct_cumulative_shock), 2) AS avg7_pct_cumulative_shock,
         ROUND(AVG(pct_increase_pricing), 2) AS avg7_pct_increase_pricing,
-        ROUND(AVG(surcharge_mismatch_rides), 1) AS avg7_surcharge_mismatch_rides,
-        ROUND(AVG(pickup_mismatch_rides), 1) AS avg7_pickup_mismatch_rides,
-        ROUND(AVG(surge_mismatch_rides), 1) AS avg7_surge_mismatch_rides,
-        ROUND(AVG(pd_mismatch_rides), 1) AS avg7_pd_mismatch_rides,
+        ROUND(AVG(pct_rounding), 2) AS avg7_pct_rounding,
         ROUND(AVG(pct_surcharge_mismatch), 2) AS avg7_pct_surcharge_mismatch,
         ROUND(AVG(pct_pickup_mismatch), 2) AS avg7_pct_pickup_mismatch,
         ROUND(AVG(pct_surge_mismatch), 2) AS avg7_pct_surge_mismatch,
         ROUND(AVG(pct_pd_mismatch), 2) AS avg7_pct_pd_mismatch
     FROM DailyCity CROSS JOIN params p
     WHERE createddate BETWEEN p.avg7_start AND p.avg7_end
+    GROUP BY 1, 2
+),
+CityAvg28 AS (
+    SELECT
+        country,
+        city_bucket,
+        ROUND(AVG(pct_cumulative_shock), 2) AS avg28_pct_cumulative_shock,
+        ROUND(STDDEV_SAMP(pct_cumulative_shock), 4) AS sd28_pct_cumulative_shock,
+        ROUND(AVG(pct_increase_pricing), 2) AS avg28_pct_increase_pricing,
+        ROUND(STDDEV_SAMP(pct_increase_pricing), 4) AS sd28_pct_increase_pricing,
+        ROUND(AVG(pct_rounding), 2) AS avg28_pct_rounding,
+        ROUND(STDDEV_SAMP(pct_rounding), 4) AS sd28_pct_rounding,
+        ROUND(AVG(pct_surcharge_mismatch), 2) AS avg28_pct_surcharge_mismatch,
+        ROUND(STDDEV_SAMP(pct_surcharge_mismatch), 4) AS sd28_pct_surcharge_mismatch,
+        ROUND(AVG(pct_pickup_mismatch), 2) AS avg28_pct_pickup_mismatch,
+        ROUND(STDDEV_SAMP(pct_pickup_mismatch), 4) AS sd28_pct_pickup_mismatch,
+        ROUND(AVG(pct_surge_mismatch), 2) AS avg28_pct_surge_mismatch,
+        ROUND(STDDEV_SAMP(pct_surge_mismatch), 4) AS sd28_pct_surge_mismatch,
+        ROUND(AVG(pct_pd_mismatch), 2) AS avg28_pct_pd_mismatch,
+        ROUND(STDDEV_SAMP(pct_pd_mismatch), 4) AS sd28_pct_pd_mismatch
+    FROM DailyCity CROSS JOIN params p
+    WHERE createddate BETWEEN p.avg28_start AND p.avg28_end
     GROUP BY 1, 2
 )
 
@@ -259,45 +341,113 @@ SELECT
     y.country,
     CAST(NULL AS VARCHAR) AS city_bucket,
     y.ride_count,
+    y.pct_cumulative_shock,
+    ROUND(y.pct_cumulative_shock - d.pct_cumulative_shock, 2) AS dod_delta_cumulative_pp,
+    ROUND(y.pct_cumulative_shock - w.pct_cumulative_shock, 2) AS wow_delta_cumulative_pp,
+    ROUND(y.pct_cumulative_shock - m.pct_cumulative_shock, 2) AS mom_delta_cumulative_pp,
+    a.avg7_pct_cumulative_shock,
+    IFF(y.pct_cumulative_shock > a.avg7_pct_cumulative_shock, TRUE, FALSE) AS major_shift_cumulative,
+    b28.avg28_pct_cumulative_shock,
+    b28.sd28_pct_cumulative_shock,
+    IFF(
+        b28.sd28_pct_cumulative_shock IS NOT NULL
+        AND y.pct_cumulative_shock > b28.avg28_pct_cumulative_shock + 2 * b28.sd28_pct_cumulative_shock,
+        TRUE, FALSE
+    ) AS exception_28d_2sd_cumulative,
+    d.pct_cumulative_shock AS cum_trend_t1,
+    t2.pct_cumulative_shock AS cum_trend_t2,
     y.pct_increase_pricing,
     ROUND(y.pct_increase_pricing - d.pct_increase_pricing, 2) AS dod_delta_pp,
     ROUND(y.pct_increase_pricing - w.pct_increase_pricing, 2) AS wow_delta_pp,
     ROUND(y.pct_increase_pricing - m.pct_increase_pricing, 2) AS mom_delta_pp,
     a.avg7_pct_increase_pricing AS avg7_pct,
     IFF(y.pct_increase_pricing > a.avg7_pct_increase_pricing, TRUE, FALSE) AS major_shift_vs_7d_avg,
+    b28.avg28_pct_increase_pricing,
+    b28.sd28_pct_increase_pricing,
+    IFF(
+        b28.sd28_pct_increase_pricing IS NOT NULL
+        AND y.pct_increase_pricing > b28.avg28_pct_increase_pricing + 2 * b28.sd28_pct_increase_pricing,
+        TRUE, FALSE
+    ) AS exception_28d_2sd_residual,
+    d.pct_increase_pricing AS res_trend_t1,
+    t2.pct_increase_pricing AS res_trend_t2,
+    y.rounding_rides,
+    y.pct_rounding,
+    ROUND(y.pct_rounding - d.pct_rounding, 2) AS dod_delta_rounding_pp,
+    ROUND(y.pct_rounding - w.pct_rounding, 2) AS wow_delta_rounding_pp,
+    ROUND(y.pct_rounding - m.pct_rounding, 2) AS mom_delta_rounding_pp,
+    a.avg7_pct_rounding,
+    IFF(y.pct_rounding > a.avg7_pct_rounding, TRUE, FALSE) AS major_shift_rounding,
+    b28.avg28_pct_rounding,
+    b28.sd28_pct_rounding,
+    IFF(
+        b28.sd28_pct_rounding IS NOT NULL
+        AND y.pct_rounding > b28.avg28_pct_rounding + 2 * b28.sd28_pct_rounding,
+        TRUE, FALSE
+    ) AS exception_28d_2sd_rounding,
     y.surcharge_mismatch_rides,
     y.pct_surcharge_mismatch,
-    ROUND(y.surcharge_mismatch_rides - d.surcharge_mismatch_rides, 0) AS dod_delta_surcharge_mismatch,
-    ROUND(y.surcharge_mismatch_rides - w.surcharge_mismatch_rides, 0) AS wow_delta_surcharge_mismatch,
-    ROUND(y.surcharge_mismatch_rides - m.surcharge_mismatch_rides, 0) AS mom_delta_surcharge_mismatch,
-    a.avg7_surcharge_mismatch_rides,
-    IFF(y.surcharge_mismatch_rides > a.avg7_surcharge_mismatch_rides, TRUE, FALSE) AS major_shift_surcharge_mismatch,
+    ROUND(y.pct_surcharge_mismatch - d.pct_surcharge_mismatch, 2) AS dod_delta_surcharge_pp,
+    ROUND(y.pct_surcharge_mismatch - w.pct_surcharge_mismatch, 2) AS wow_delta_surcharge_pp,
+    ROUND(y.pct_surcharge_mismatch - m.pct_surcharge_mismatch, 2) AS mom_delta_surcharge_pp,
+    a.avg7_pct_surcharge_mismatch,
+    IFF(y.pct_surcharge_mismatch > a.avg7_pct_surcharge_mismatch, TRUE, FALSE) AS major_shift_surcharge_mismatch,
+    b28.avg28_pct_surcharge_mismatch,
+    b28.sd28_pct_surcharge_mismatch,
+    IFF(
+        b28.sd28_pct_surcharge_mismatch IS NOT NULL
+        AND y.pct_surcharge_mismatch > b28.avg28_pct_surcharge_mismatch + 2 * b28.sd28_pct_surcharge_mismatch,
+        TRUE, FALSE
+    ) AS exception_28d_2sd_surcharge,
     y.pickup_mismatch_rides,
     y.pct_pickup_mismatch,
-    ROUND(y.pickup_mismatch_rides - d.pickup_mismatch_rides, 0) AS dod_delta_pickup_mismatch,
-    ROUND(y.pickup_mismatch_rides - w.pickup_mismatch_rides, 0) AS wow_delta_pickup_mismatch,
-    ROUND(y.pickup_mismatch_rides - m.pickup_mismatch_rides, 0) AS mom_delta_pickup_mismatch,
-    a.avg7_pickup_mismatch_rides,
-    IFF(y.pickup_mismatch_rides > a.avg7_pickup_mismatch_rides, TRUE, FALSE) AS major_shift_pickup_mismatch,
+    ROUND(y.pct_pickup_mismatch - d.pct_pickup_mismatch, 2) AS dod_delta_pickup_pp,
+    ROUND(y.pct_pickup_mismatch - w.pct_pickup_mismatch, 2) AS wow_delta_pickup_pp,
+    ROUND(y.pct_pickup_mismatch - m.pct_pickup_mismatch, 2) AS mom_delta_pickup_pp,
+    a.avg7_pct_pickup_mismatch,
+    IFF(y.pct_pickup_mismatch > a.avg7_pct_pickup_mismatch, TRUE, FALSE) AS major_shift_pickup_mismatch,
+    b28.avg28_pct_pickup_mismatch,
+    b28.sd28_pct_pickup_mismatch,
+    IFF(
+        b28.sd28_pct_pickup_mismatch IS NOT NULL
+        AND y.pct_pickup_mismatch > b28.avg28_pct_pickup_mismatch + 2 * b28.sd28_pct_pickup_mismatch,
+        TRUE, FALSE
+    ) AS exception_28d_2sd_pickup,
     y.surge_mismatch_rides,
     y.pct_surge_mismatch,
-    ROUND(y.surge_mismatch_rides - d.surge_mismatch_rides, 0) AS dod_delta_surge_mismatch,
-    ROUND(y.surge_mismatch_rides - w.surge_mismatch_rides, 0) AS wow_delta_surge_mismatch,
-    ROUND(y.surge_mismatch_rides - m.surge_mismatch_rides, 0) AS mom_delta_surge_mismatch,
-    a.avg7_surge_mismatch_rides,
-    IFF(y.surge_mismatch_rides > a.avg7_surge_mismatch_rides, TRUE, FALSE) AS major_shift_surge_mismatch,
+    ROUND(y.pct_surge_mismatch - d.pct_surge_mismatch, 2) AS dod_delta_surge_pp,
+    ROUND(y.pct_surge_mismatch - w.pct_surge_mismatch, 2) AS wow_delta_surge_pp,
+    ROUND(y.pct_surge_mismatch - m.pct_surge_mismatch, 2) AS mom_delta_surge_pp,
+    a.avg7_pct_surge_mismatch,
+    IFF(y.pct_surge_mismatch > a.avg7_pct_surge_mismatch, TRUE, FALSE) AS major_shift_surge_mismatch,
+    b28.avg28_pct_surge_mismatch,
+    b28.sd28_pct_surge_mismatch,
+    IFF(
+        b28.sd28_pct_surge_mismatch IS NOT NULL
+        AND y.pct_surge_mismatch > b28.avg28_pct_surge_mismatch + 2 * b28.sd28_pct_surge_mismatch,
+        TRUE, FALSE
+    ) AS exception_28d_2sd_surge,
     y.pd_mismatch_rides,
     y.pct_pd_mismatch,
-    ROUND(y.pd_mismatch_rides - d.pd_mismatch_rides, 0) AS dod_delta_pd_mismatch,
-    ROUND(y.pd_mismatch_rides - w.pd_mismatch_rides, 0) AS wow_delta_pd_mismatch,
-    ROUND(y.pd_mismatch_rides - m.pd_mismatch_rides, 0) AS mom_delta_pd_mismatch,
-    a.avg7_pd_mismatch_rides,
-    IFF(y.pd_mismatch_rides > a.avg7_pd_mismatch_rides, TRUE, FALSE) AS major_shift_pd_mismatch
+    ROUND(y.pct_pd_mismatch - d.pct_pd_mismatch, 2) AS dod_delta_pd_pp,
+    ROUND(y.pct_pd_mismatch - w.pct_pd_mismatch, 2) AS wow_delta_pd_pp,
+    ROUND(y.pct_pd_mismatch - m.pct_pd_mismatch, 2) AS mom_delta_pd_pp,
+    a.avg7_pct_pd_mismatch,
+    IFF(y.pct_pd_mismatch > a.avg7_pct_pd_mismatch, TRUE, FALSE) AS major_shift_pd_mismatch,
+    b28.avg28_pct_pd_mismatch,
+    b28.sd28_pct_pd_mismatch,
+    IFF(
+        b28.sd28_pct_pd_mismatch IS NOT NULL
+        AND y.pct_pd_mismatch > b28.avg28_pct_pd_mismatch + 2 * b28.sd28_pct_pd_mismatch,
+        TRUE, FALSE
+    ) AS exception_28d_2sd_pd
 FROM CountryYesterday y
 LEFT JOIN CountryDoD d ON y.country = d.country
 LEFT JOIN CountryWoW w ON y.country = w.country
 LEFT JOIN CountryMoM m ON y.country = m.country
 LEFT JOIN CountryAvg7 a ON y.country = a.country
+LEFT JOIN CountryAvg28 b28 ON y.country = b28.country
+LEFT JOIN CountryTrendT2 t2 ON y.country = t2.country
 
 UNION ALL
 
@@ -307,44 +457,111 @@ SELECT
     y.country,
     y.city_bucket,
     y.ride_count,
+    y.pct_cumulative_shock,
+    ROUND(y.pct_cumulative_shock - d.pct_cumulative_shock, 2) AS dod_delta_cumulative_pp,
+    ROUND(y.pct_cumulative_shock - w.pct_cumulative_shock, 2) AS wow_delta_cumulative_pp,
+    ROUND(y.pct_cumulative_shock - m.pct_cumulative_shock, 2) AS mom_delta_cumulative_pp,
+    a.avg7_pct_cumulative_shock,
+    IFF(y.pct_cumulative_shock > a.avg7_pct_cumulative_shock, TRUE, FALSE) AS major_shift_cumulative,
+    b28.avg28_pct_cumulative_shock,
+    b28.sd28_pct_cumulative_shock,
+    IFF(
+        b28.sd28_pct_cumulative_shock IS NOT NULL
+        AND y.pct_cumulative_shock > b28.avg28_pct_cumulative_shock + 2 * b28.sd28_pct_cumulative_shock,
+        TRUE, FALSE
+    ) AS exception_28d_2sd_cumulative,
+    CAST(NULL AS FLOAT) AS cum_trend_t1,
+    CAST(NULL AS FLOAT) AS cum_trend_t2,
     y.pct_increase_pricing,
     ROUND(y.pct_increase_pricing - d.pct_increase_pricing, 2) AS dod_delta_pp,
     ROUND(y.pct_increase_pricing - w.pct_increase_pricing, 2) AS wow_delta_pp,
     ROUND(y.pct_increase_pricing - m.pct_increase_pricing, 2) AS mom_delta_pp,
     a.avg7_pct_increase_pricing AS avg7_pct,
     IFF(y.pct_increase_pricing > a.avg7_pct_increase_pricing, TRUE, FALSE) AS major_shift_vs_7d_avg,
+    b28.avg28_pct_increase_pricing,
+    b28.sd28_pct_increase_pricing,
+    IFF(
+        b28.sd28_pct_increase_pricing IS NOT NULL
+        AND y.pct_increase_pricing > b28.avg28_pct_increase_pricing + 2 * b28.sd28_pct_increase_pricing,
+        TRUE, FALSE
+    ) AS exception_28d_2sd_residual,
+    CAST(NULL AS FLOAT) AS res_trend_t1,
+    CAST(NULL AS FLOAT) AS res_trend_t2,
+    y.rounding_rides,
+    y.pct_rounding,
+    ROUND(y.pct_rounding - d.pct_rounding, 2) AS dod_delta_rounding_pp,
+    ROUND(y.pct_rounding - w.pct_rounding, 2) AS wow_delta_rounding_pp,
+    ROUND(y.pct_rounding - m.pct_rounding, 2) AS mom_delta_rounding_pp,
+    a.avg7_pct_rounding,
+    IFF(y.pct_rounding > a.avg7_pct_rounding, TRUE, FALSE) AS major_shift_rounding,
+    b28.avg28_pct_rounding,
+    b28.sd28_pct_rounding,
+    IFF(
+        b28.sd28_pct_rounding IS NOT NULL
+        AND y.pct_rounding > b28.avg28_pct_rounding + 2 * b28.sd28_pct_rounding,
+        TRUE, FALSE
+    ) AS exception_28d_2sd_rounding,
     y.surcharge_mismatch_rides,
     y.pct_surcharge_mismatch,
-    ROUND(y.surcharge_mismatch_rides - d.surcharge_mismatch_rides, 0) AS dod_delta_surcharge_mismatch,
-    ROUND(y.surcharge_mismatch_rides - w.surcharge_mismatch_rides, 0) AS wow_delta_surcharge_mismatch,
-    ROUND(y.surcharge_mismatch_rides - m.surcharge_mismatch_rides, 0) AS mom_delta_surcharge_mismatch,
-    a.avg7_surcharge_mismatch_rides,
-    IFF(y.surcharge_mismatch_rides > a.avg7_surcharge_mismatch_rides, TRUE, FALSE) AS major_shift_surcharge_mismatch,
+    ROUND(y.pct_surcharge_mismatch - d.pct_surcharge_mismatch, 2) AS dod_delta_surcharge_pp,
+    ROUND(y.pct_surcharge_mismatch - w.pct_surcharge_mismatch, 2) AS wow_delta_surcharge_pp,
+    ROUND(y.pct_surcharge_mismatch - m.pct_surcharge_mismatch, 2) AS mom_delta_surcharge_pp,
+    a.avg7_pct_surcharge_mismatch,
+    IFF(y.pct_surcharge_mismatch > a.avg7_pct_surcharge_mismatch, TRUE, FALSE) AS major_shift_surcharge_mismatch,
+    b28.avg28_pct_surcharge_mismatch,
+    b28.sd28_pct_surcharge_mismatch,
+    IFF(
+        b28.sd28_pct_surcharge_mismatch IS NOT NULL
+        AND y.pct_surcharge_mismatch > b28.avg28_pct_surcharge_mismatch + 2 * b28.sd28_pct_surcharge_mismatch,
+        TRUE, FALSE
+    ) AS exception_28d_2sd_surcharge,
     y.pickup_mismatch_rides,
     y.pct_pickup_mismatch,
-    ROUND(y.pickup_mismatch_rides - d.pickup_mismatch_rides, 0) AS dod_delta_pickup_mismatch,
-    ROUND(y.pickup_mismatch_rides - w.pickup_mismatch_rides, 0) AS wow_delta_pickup_mismatch,
-    ROUND(y.pickup_mismatch_rides - m.pickup_mismatch_rides, 0) AS mom_delta_pickup_mismatch,
-    a.avg7_pickup_mismatch_rides,
-    IFF(y.pickup_mismatch_rides > a.avg7_pickup_mismatch_rides, TRUE, FALSE) AS major_shift_pickup_mismatch,
+    ROUND(y.pct_pickup_mismatch - d.pct_pickup_mismatch, 2) AS dod_delta_pickup_pp,
+    ROUND(y.pct_pickup_mismatch - w.pct_pickup_mismatch, 2) AS wow_delta_pickup_pp,
+    ROUND(y.pct_pickup_mismatch - m.pct_pickup_mismatch, 2) AS mom_delta_pickup_pp,
+    a.avg7_pct_pickup_mismatch,
+    IFF(y.pct_pickup_mismatch > a.avg7_pct_pickup_mismatch, TRUE, FALSE) AS major_shift_pickup_mismatch,
+    b28.avg28_pct_pickup_mismatch,
+    b28.sd28_pct_pickup_mismatch,
+    IFF(
+        b28.sd28_pct_pickup_mismatch IS NOT NULL
+        AND y.pct_pickup_mismatch > b28.avg28_pct_pickup_mismatch + 2 * b28.sd28_pct_pickup_mismatch,
+        TRUE, FALSE
+    ) AS exception_28d_2sd_pickup,
     y.surge_mismatch_rides,
     y.pct_surge_mismatch,
-    ROUND(y.surge_mismatch_rides - d.surge_mismatch_rides, 0) AS dod_delta_surge_mismatch,
-    ROUND(y.surge_mismatch_rides - w.surge_mismatch_rides, 0) AS wow_delta_surge_mismatch,
-    ROUND(y.surge_mismatch_rides - m.surge_mismatch_rides, 0) AS mom_delta_surge_mismatch,
-    a.avg7_surge_mismatch_rides,
-    IFF(y.surge_mismatch_rides > a.avg7_surge_mismatch_rides, TRUE, FALSE) AS major_shift_surge_mismatch,
+    ROUND(y.pct_surge_mismatch - d.pct_surge_mismatch, 2) AS dod_delta_surge_pp,
+    ROUND(y.pct_surge_mismatch - w.pct_surge_mismatch, 2) AS wow_delta_surge_pp,
+    ROUND(y.pct_surge_mismatch - m.pct_surge_mismatch, 2) AS mom_delta_surge_pp,
+    a.avg7_pct_surge_mismatch,
+    IFF(y.pct_surge_mismatch > a.avg7_pct_surge_mismatch, TRUE, FALSE) AS major_shift_surge_mismatch,
+    b28.avg28_pct_surge_mismatch,
+    b28.sd28_pct_surge_mismatch,
+    IFF(
+        b28.sd28_pct_surge_mismatch IS NOT NULL
+        AND y.pct_surge_mismatch > b28.avg28_pct_surge_mismatch + 2 * b28.sd28_pct_surge_mismatch,
+        TRUE, FALSE
+    ) AS exception_28d_2sd_surge,
     y.pd_mismatch_rides,
     y.pct_pd_mismatch,
-    ROUND(y.pd_mismatch_rides - d.pd_mismatch_rides, 0) AS dod_delta_pd_mismatch,
-    ROUND(y.pd_mismatch_rides - w.pd_mismatch_rides, 0) AS wow_delta_pd_mismatch,
-    ROUND(y.pd_mismatch_rides - m.pd_mismatch_rides, 0) AS mom_delta_pd_mismatch,
-    a.avg7_pd_mismatch_rides,
-    IFF(y.pd_mismatch_rides > a.avg7_pd_mismatch_rides, TRUE, FALSE) AS major_shift_pd_mismatch
+    ROUND(y.pct_pd_mismatch - d.pct_pd_mismatch, 2) AS dod_delta_pd_pp,
+    ROUND(y.pct_pd_mismatch - w.pct_pd_mismatch, 2) AS wow_delta_pd_pp,
+    ROUND(y.pct_pd_mismatch - m.pct_pd_mismatch, 2) AS mom_delta_pd_pp,
+    a.avg7_pct_pd_mismatch,
+    IFF(y.pct_pd_mismatch > a.avg7_pct_pd_mismatch, TRUE, FALSE) AS major_shift_pd_mismatch,
+    b28.avg28_pct_pd_mismatch,
+    b28.sd28_pct_pd_mismatch,
+    IFF(
+        b28.sd28_pct_pd_mismatch IS NOT NULL
+        AND y.pct_pd_mismatch > b28.avg28_pct_pd_mismatch + 2 * b28.sd28_pct_pd_mismatch,
+        TRUE, FALSE
+    ) AS exception_28d_2sd_pd
 FROM CityYesterday y
 LEFT JOIN CityDoD d ON y.country = d.country AND y.city_bucket = d.city_bucket
 LEFT JOIN CityWoW w ON y.country = w.country AND y.city_bucket = w.city_bucket
 LEFT JOIN CityMoM m ON y.country = m.country AND y.city_bucket = m.city_bucket
 LEFT JOIN CityAvg7 a ON y.country = a.country AND y.city_bucket = a.city_bucket
+LEFT JOIN CityAvg28 b28 ON y.country = b28.country AND y.city_bucket = b28.city_bucket
 
 ORDER BY 1, 3, 4;
