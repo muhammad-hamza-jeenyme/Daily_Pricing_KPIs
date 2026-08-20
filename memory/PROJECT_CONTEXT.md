@@ -1,43 +1,36 @@
 # Project memory — Daily Pricing KPIs
 
-Last updated: 2026-08-11 (`FIXEDSPEEDCAP` + `MAXWITHINMINUTESVARIANCE` / withinA rule)
+Last updated: 2026-08-20 (spillover NET price shocks)
 
 ## Mission
 
-Fare-integrity tracker (v1). Cloud Agent **11:00 AM PKT**; SA+JO; digest **day × AREA_CODE × UPFRONTSCENARIO × issue_type**; **29** complete days; DoD/WoW/MoM (vs 28d prior).
+Fare-integrity tracker. Cloud Agent **11:00 AM PKT**; SA+JO; channel tables + 3-run canvas.  
+Comparisons: DoD / WoW / MoM (vs 28d prior) + 7d avg (channel warn) + 28d±2σ (canvas).
 
 ## Locked compare
 
 - `PC_Surcharge_Gross = ROUND(SURCHARGE * IFF(SA, 1.15, 1.0), 2)`
 - Shown = `VALUE + VAT(hailing) + PC_Surcharge_Gross`
 - Norm receipt = `RR.TOTALAMOUNTWITHTAX + DISCOUNT + VATONDISCOUNT`
-- issue_type: `matched` | `rounding` | `increase_non_issue` | `increase_pricing` | `decrease_pricing`
-- Prod scenario casing: `withinA` | `withinB` | `beyondB`
-- `withinA` = A-band (`ACTUALTIME*60` in `[TIMETHRESHHOLDSALOWVALUE, TIMETHRESHHOLDSAHIGHVALUE]`) **or** `ACTUALTIME − APPLIEDESTIMATETIME ≤ MAXWITHINMINUTESVARIANCE`
-- `UPFRONT.FIXEDSPEEDCAP` = speed for `SCALEDDISTANCE` from `ACTUALTIME`; `MAXWITHINMINUTESVARIANCE` = max WithinA allowance (minutes)
+- **Cumulative / Residual shocks = NET** of spillover recovery (see below)
+- issue_type (gross taxonomy still useful): matched / rounding / increase_non_issue / increase_pricing / decrease_pricing
+- Prod scenario: `withinA` | `withinB` | `beyondB`
+- `withinA` = A-band **or** `ACTUALTIME − APPLIEDESTIMATETIME ≤ MAXWITHINMINUTESVARIANCE`
+- `FIXEDSPEEDCAP` / `MAXWITHINMINUTESVARIANCE` on `UPFRONT`
+
+## Spillover double-count (2026-08-19)
+
+Digital pay (ApplePay / CreditCard; cash exempt): underpay ≤ ~1 SAR / ~0.1 JOD → `OUTSTANDINGBALANCE` → recovered next ride as `CANCELLATIONFINE`.  
+Exclude recovery: `prev_outs > 0` AND `ABS(prev_outs − CANCELLATIONFINE) ≤ 0.02`. **LOOKBACK 30d** (load-bearing).  
+Docs: `docs/payment-spillover-price-shocks.md`
 
 ## SQL
 
-- Aggregate: `sql/fare_integrity_daily_digest.sql` ← **run this**
-- Ride-level: `tables schema/draft SQL.sql`
-- Validation notes: `docs/validation-run-2026-08-04.md`
+- Channel + canvas: `sql/fare_integrity_channel_summary.sql` ← **daily automation**
+- Headline net shocks: `sql/daily_price_shock_alert.sql`
+- Specs: `docs/alert-rules.md`, `automations/DAILY_SLACK_INSTRUCTIONS.md`
 
-## Validation (2026-08-04)
+## Slack / automation
 
-- Query succeeded on Snowflake MCP
-- Window: 2026-07-06 → 2026-08-03 (~5.18M rides)
-- Yesterday top `increase_pricing` areas: AMM, JED, RUH, …
-
-## Slack / automation (locked 2026-08-04)
-
-- Channel: `C0BMWLMR03T`
-- Cities: RUH, JED, MAD, DMM, MEC, AMM, IRB, ZRQ
-- Major shift: yesterday KPI > avg of prior 7 complete days; always name Area_Code
-- **Requires Cursor Cloud Agent** (laptop-independent)
-- Spec: `docs/alert-rules.md`
-
-## Next
-
-1. Build DoD/WoW/MoM + 7d-avg rollup SQL (watchlist cities)
-2. Slack daily report + major-shift format (optional canvas)
-3. Existing Cloud Automation @ 11:00 AM PKT
+- Channel: `C0BMWLMR03T` · Pulsar webhook + canvas `F0BN0E7RJ31`
+- Existing automation only: **Pricing KPI Alerts Slack** @ 11:00 AM PKT

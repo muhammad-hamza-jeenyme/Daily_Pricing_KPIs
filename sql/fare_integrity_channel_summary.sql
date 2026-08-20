@@ -4,9 +4,17 @@
 -- Major SA: RUH, JED, MAD, DMM, MEC | Major JO: AMM, IRB, ZRQ
 -- Spec: docs/alert-rules.md | automations/DAILY_SLACK_INSTRUCTIONS.md
 --
--- Cumulative price shocks % = Fare_Diff > 0.01 (any reason: waiting, cancel,
---   additional time, residual pricing, tech bugs). EXCLUDES rounding.
--- Residual fare increase % = increase_pricing only (Fare_Diff > 0.01 AND Residual > 0.01).
+-- SPILLOVER FIX (2026-08-19, LOOKBACK_DAYS = 30 — do not shrink):
+--   Digital-payment rides with fare rise below 2nd-debit threshold park
+--   remainder in RIDE.DETAILS.OUTSTANDINGBALANCE; recovered on the next ride
+--   as RECEIPTS.CANCELLATIONFINE. Both legs were double-counted as shocks.
+--   Exclude the RECOVERY leg (is_spillover_recovery). Lookback starts 30 days
+--   BEFORE win_start so DoD/WoW/MoM/28d days still see prior outs.
+--
+-- Cumulative price shocks % (NET) = Fare_Diff > 0.01 AND NOT spillover recovery.
+-- Residual fare increase % (NET) = Fare_Diff > 0.01 AND Residual > 0.01
+--   AND NOT spillover recovery.
+-- Spillover monitor: spillover_recovery_rides / pct_spillover_recovery
 -- Rounding % = 0 < ABS(Fare_Diff) <= 0.01 (tech bug / penny noise).
 -- Surcharge mismatch: withinA + dropoff at destination AND
 --   (Details.SURCHARGE + Details.INTERCITYSURCHARGE) != PriceChecks.SURCHARGE
@@ -26,16 +34,45 @@ WITH params AS (
         DATEADD('day', -29, CURRENT_DATE()) AS avg28_start,
         DATEADD('day', -2, CURRENT_DATE()) AS avg28_end,
         DATEADD('day', -29, CURRENT_DATE()) AS win_start,
-        CURRENT_DATE() AS win_end
+        CURRENT_DATE() AS win_end,
+        /* Spillover LAG must see rides before every day in [win_start, win_end) */
+        DATEADD('day', -30, DATEADD('day', -29, CURRENT_DATE())) AS lookback_start,
+        30 AS lookback_days
+),
+
+/* Every ride in lookback+window so LAG can see each passenger's prior outs */
+LookbackRides AS (
+    SELECT
+        rd.rideid,
+        rd.passengerid,
+        rd.created,
+        rd.outstandingbalance AS outs
+    FROM jeeny_prod.ride.details rd
+    JOIN jeeny_prod.general.areas ga ON rd.area_code = ga.area_code
+    CROSS JOIN params p
+    WHERE rd.createddate >= p.lookback_start
+      AND rd.createddate < p.win_end
+      AND ga.country_code IN ('SA', 'JO')
+),
+
+PrevOuts AS (
+    SELECT
+        rideid,
+        LAG(outs) OVER (PARTITION BY passengerid ORDER BY created) AS prev_outs
+    FROM LookbackRides
 ),
 
 BaseRides AS (
     SELECT
         rd.rideid,
+        rd.passengerid,
         rd.createddate,
         rd.area_code,
         ga.country_code AS country,
         rd.request_service,
+        rd.modeofpayment,
+        COALESCE(NULLIF(TRIM(rd.cardflag), ''), '(none)') AS cardflag,
+        rd.outstandingbalance,
         CASE
             WHEN ga.country_code = 'SA' AND rd.area_code IN ('RUH', 'JED', 'MAD', 'DMM', 'MEC')
                 THEN rd.area_code
@@ -62,6 +99,7 @@ BaseRides AS (
         COALESCE(rr.vatoncancellationfine, 0) AS rr_vatcancelfine,
         COALESCE(rr.waitingcharges, 0) AS rr_waitingcharges,
         COALESCE(rr.vatonwaitingcharges, 0) AS rr_vatwaitingcharges,
+        pv.prev_outs,
         pc.pickuplat,
         pc.pickuplong,
         pc.actualdatetime AS pc_actualdatetime
@@ -72,6 +110,7 @@ BaseRides AS (
     JOIN jeeny_prod.passengers.pricechecks pc
         ON pc.rideid = rd.rideid
        AND LOWER(pc.servicefilter) = LOWER(rd.request_service)
+    LEFT JOIN PrevOuts pv ON pv.rideid = rd.rideid
     CROSS JOIN params p
     WHERE rd.boarded IS NOT NULL
       AND uf.originalestimatefare IS NOT NULL
@@ -117,15 +156,25 @@ Classified AS (
             - (b.pc_value + b.pc_vat_hailing + b.pc_surcharge_gross)
             - (b.rr_cancelfine + b.rr_vatcancelfine + b.rr_waitingcharges + b.rr_vatwaitingcharges), 2
         ) AS residual,
-        /* Cumulative price shock: any Fare_Diff > 0.01 (excludes rounding) */
+        /* Recovery leg of outstanding-balance spillover (VAT excluded from ABS) */
+        IFF(
+            ZEROIFNULL(b.prev_outs) > 0
+            AND ABS(b.prev_outs - b.rr_cancelfine) <= 0.02,
+            1, 0
+        ) AS is_spillover_recovery,
+        /* Cumulative price shock NET: Fare_Diff > 0.01, exclude spillover recovery */
         CASE
             WHEN ROUND(
                 (b.rr_total + b.rr_discount + b.rr_vatdiscount)
                 - (b.pc_value + b.pc_vat_hailing + b.pc_surcharge_gross), 2
             ) > 0.01
+             AND NOT (
+                ZEROIFNULL(b.prev_outs) > 0
+                AND ABS(b.prev_outs - b.rr_cancelfine) <= 0.02
+             )
             THEN 1 ELSE 0
         END AS is_cumulative_price_shock,
-        /* Residual pricing increase (excludes waiting/cancel-explained) */
+        /* Residual pricing increase NET (excludes waiting/cancel-explained + spillover) */
         CASE
             WHEN ROUND(
                 (b.rr_total + b.rr_discount + b.rr_vatdiscount)
@@ -136,6 +185,10 @@ Classified AS (
                 - (b.pc_value + b.pc_vat_hailing + b.pc_surcharge_gross)
                 - (b.rr_cancelfine + b.rr_vatcancelfine + b.rr_waitingcharges + b.rr_vatwaitingcharges), 2
              ) > 0.01
+             AND NOT (
+                ZEROIFNULL(b.prev_outs) > 0
+                AND ABS(b.prev_outs - b.rr_cancelfine) <= 0.02
+             )
             THEN 1 ELSE 0
         END AS is_increase_pricing,
         /* Rounding tech bug: 0 < |Fare_Diff| <= 0.01 */
@@ -191,6 +244,8 @@ DailyCountry AS (
         createddate,
         country,
         COUNT(*) AS ride_count,
+        SUM(is_spillover_recovery) AS spillover_recovery_rides,
+        ROUND(100.0 * SUM(is_spillover_recovery) / NULLIF(COUNT(*), 0), 2) AS pct_spillover_recovery,
         SUM(is_cumulative_price_shock) AS cumulative_shock_rides,
         ROUND(100.0 * SUM(is_cumulative_price_shock) / NULLIF(COUNT(*), 0), 2) AS pct_cumulative_shock,
         SUM(is_increase_pricing) AS increase_pricing_rides,
@@ -215,6 +270,8 @@ DailyCity AS (
         country,
         city_bucket,
         COUNT(*) AS ride_count,
+        SUM(is_spillover_recovery) AS spillover_recovery_rides,
+        ROUND(100.0 * SUM(is_spillover_recovery) / NULLIF(COUNT(*), 0), 2) AS pct_spillover_recovery,
         SUM(is_cumulative_price_shock) AS cumulative_shock_rides,
         ROUND(100.0 * SUM(is_cumulative_price_shock) / NULLIF(COUNT(*), 0), 2) AS pct_cumulative_shock,
         SUM(is_increase_pricing) AS increase_pricing_rides,
@@ -341,6 +398,8 @@ SELECT
     y.country,
     CAST(NULL AS VARCHAR) AS city_bucket,
     y.ride_count,
+    y.spillover_recovery_rides,
+    y.pct_spillover_recovery,
     y.pct_cumulative_shock,
     ROUND(y.pct_cumulative_shock - d.pct_cumulative_shock, 2) AS dod_delta_cumulative_pp,
     ROUND(y.pct_cumulative_shock - w.pct_cumulative_shock, 2) AS wow_delta_cumulative_pp,
@@ -457,6 +516,8 @@ SELECT
     y.country,
     y.city_bucket,
     y.ride_count,
+    y.spillover_recovery_rides,
+    y.pct_spillover_recovery,
     y.pct_cumulative_shock,
     ROUND(y.pct_cumulative_shock - d.pct_cumulative_shock, 2) AS dod_delta_cumulative_pp,
     ROUND(y.pct_cumulative_shock - w.pct_cumulative_shock, 2) AS wow_delta_cumulative_pp,

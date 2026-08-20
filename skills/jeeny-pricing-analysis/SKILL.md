@@ -49,7 +49,10 @@ Residual           = Fare_Diff - Non_Issue
 | `Fare_Diff > 0.01`, `Residual > 0.01` | `increase_pricing` |
 | `Fare_Diff < -0.01` | `decrease_pricing` |
 
-**Price shock (strict)** = `Fare_Diff > 0.01`. `increase_pricing` is narrower — it also demands `Residual > 0.01`. The two differ by 1.7–2.4× (SA 17.65% vs 41.50%; JO 15.24% vs 26.24% on the 2026-08-04 window), so always establish which one is being asked about.
+**Price shock (strict / NET for digests)** = `Fare_Diff > 0.01` **and not** spillover recovery  
+(`prev_outs > 0` AND `ABS(prev_outs − CANCELLATIONFINE) ≤ 0.02`; LOOKBACK 30d).  
+`increase_pricing` is narrower — also demands `Residual > 0.01`, and digests exclude spillover recovery the same way.  
+Gross vs net: ~12.7% of 30d gross shocks were recovery double-counts (SA ~41%→~34%; JO ~26%→~25%). Spec: `docs/payment-spillover-price-shocks.md`. Always say whether a number is **gross** or **net**.
 
 ## 3. Residual decomposition — the sharpest tool here
 
@@ -75,7 +78,7 @@ Applied to `Fare_Diff > 0`. Bucket sizes, averages and confidence: `references/b
 | 1 | Surge / PD mismatch | `ROUND(pc_surge,4) <> ROUND(rd_surge,4)` OR same for `DISCRIMINATIONMULTIPLIER` | **TECH BUG** (hypothesis) |
 | 2 | Surcharge mismatch | `withinA` AND dropoff at dest AND `ROUND(rd.SURCHARGE + rd.INTERCITYSURCHARGE,2) <> ROUND(pc.SURCHARGE,2)` (ex-VAT both sides) | **TECH BUG** (hypothesis) |
 | 3 | Wrong pickup pin | PC pickup vs first `ride_offered` event > 100 m | **TECH BUG**, low confidence (proxy) |
-| 4 | Prior cancellation fine | `CANCELLATIONFINE + VATONCANCELLATIONFINE > 0.01` | **LEGITIMATE** |
+| 4 | Prior unpaid / cancel fine | `CANCELLATIONFINE(+VAT) > 0.01` — if spillover recovery (`prev_outs` match ±0.02), **exclude from NET shock counts** | **LEGITIMATE** recovery / prior cancel |
 | 5 | Waiting charges | `WAITINGCHARGES + VATONWAITINGCHARGES > 0.01` | **LEGITIMATE** |
 | 6 | Rounding | `0 < Fare_Diff <= 0.01` | **TECH BUG**, penny impact; empty among strict shocks |
 | 7 | Additional time | `ADDITIONALTIMEVALUE > 0.01` AND dropoff at dest | **LEGITIMATE** charge, disclosure gap |

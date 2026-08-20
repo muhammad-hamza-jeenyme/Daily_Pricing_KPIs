@@ -6,17 +6,21 @@ Status: **Validated** via MCP on 2026-08-04 (`docs/validation-run-2026-08-04.md`
 
 - Agent: Cursor Cloud Agent (**11:00 AM PKT**)
 - Access: Snowflake MCP `sql_exec_tool`
-- Primary SQL: `sql/fare_integrity_daily_digest.sql`
+- Primary SQL: `sql/fare_integrity_channel_summary.sql` (daily Pulsar; NET shocks)
+- Headline: `sql/daily_price_shock_alert.sql`
+- Spillover: `docs/payment-spillover-price-shocks.md`
 
 ## Objects
 
 | Object | Role |
 |--------|------|
-| `JEENY_PROD.RIDE.DETAILS` | Boarded rides, `CREATEDDATE` (Saudi), surge/PD, area |
+| `JEENY_PROD.RIDE.DETAILS` | Boarded rides, `CREATEDDATE` (Saudi), surge/PD, area, `MODEOFPAYMENT`, `CARDFLAG`, `OUTSTANDINGBALANCE` |
 | `JEENY_PROD.RIDE.UPFRONT` | Scenario, ORIG/CHARGING fares, scaled distance (`FIXEDSPEEDCAP`), WithinA max variance (`MAXWITHINMINUTESVARIANCE`), dropoff flag |
-| `JEENY_PROD.RIDE.RECEIPTS` | Final `TOTALAMOUNTWITHTAX`, waiting, cancel, discount |
+| `JEENY_PROD.RIDE.RECEIPTS` | Final `TOTALAMOUNTWITHTAX`, waiting, cancel (incl. spillover recovery), discount |
 | `JEENY_PROD.PASSENGERS.PRICECHECKS` | PriceCheck `VALUE`, `VAT` (hailing), `SURCHARGE` (ex-VAT) |
 | `JEENY_PROD.GENERAL.AREAS` | `country_code` (SA / JO) |
+| `JEENY_PROD.PASSENGERS.TRANSACTIONS` | Wallet top-up on overpay / ride-change (investigation) |
+| `JEENY_PROD.GENERAL.JTRANSACTION` | Card VOID / 2nd debit paths (investigation) |
 
 ## Join keys
 

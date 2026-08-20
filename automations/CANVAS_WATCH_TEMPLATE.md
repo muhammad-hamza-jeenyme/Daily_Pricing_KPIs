@@ -18,6 +18,8 @@ List a KPI×city (or country Total) **only if** SQL `exception_28d_2sd_* = TRUE`
 `yesterday_rate > avg28 + 2 * sd28`  
 (baseline = 28 complete days ending the day before report date; sample stddev)
 
+Cumulative / Residual rates are **NET of spillover recovery**.
+
 If none fire → write `_No 28d±2σ exceptions_`.
 
 ## Today’s section shape
@@ -25,27 +27,37 @@ If none fire → write `_No 28d±2σ exceptions_`.
 ```markdown
 ## YYYY-MM-DD (Weekday)
 
-### Trend (country Total, last 3 runs → oldest)
-SA Cumulative: t2 → t1 → **t0**   e.g. `41.8 → 42.1 → **43.9**`
+### Trend (country Total, last 3 runs → oldest) — NET shocks
+SA Cumulative: t2 → t1 → **t0**
 SA Residual:   t2 → t1 → **t0**
 JO Cumulative: …
 JO Residual:   …
 
-Use country rows: `pct_*` = t0, `*_trend_t1`, `*_trend_t2`.
-Optional text sparkline: ▁▂▃▄▅▆▇ from the three values (min–max scaled).
+Use country rows: `pct_cumulative_shock` / `pct_increase_pricing` = t0, `*_trend_t1`, `*_trend_t2`.
+
+### Spillover monitor (not a shock)
+SA recovery %: **x.x** · JO: **y.y** (`pct_spillover_recovery`)
+Only call out if clearly elevated vs recent runs.
 
 ### Exceptions (28d mean + 2σ)
-- `JED` · Residual fare increase % · **18.8** (avg28 16.1 · σ 0.9 · thresh 17.9)
-- `SA Total` · Surcharge mismatch % · …
+- `JED` · Residual fare increase % · **…** (avg28 … · σ … · thresh …)
+- …
 
 ### Investigate today
-1. **JED · Residual** — breached 28d+2σ; DoD +x.xpp; check withinA+dest residual / surcharge if co-moving
-2. Optional second lead only if a clearly distinct second exception
+1. **City · KPI** — why (one line)
+2. Optional second lead
 
 If no exceptions: `_No investigate leads — quiet day._`
 ```
 
 ## Do not put on canvas
 - Channel tables / full KPI matrices  
-- Definition glossaries  
+- Definition glossaries / payment essays (link repo docs if needed)  
 - Quiet KPIs that did not breach 28d+2σ  
+
+## Quick defs (agent-only — do not paste onto canvas)
+| KPI | Rule |
+|-----|------|
+| Cumulative / Residual | NET — exclude spillover recovery |
+| Spillover recovery | prior `OUTSTANDINGBALANCE` matched by next-ride `CANCELLATIONFINE` (±0.02) |
+| Spec | `docs/payment-spillover-price-shocks.md` |

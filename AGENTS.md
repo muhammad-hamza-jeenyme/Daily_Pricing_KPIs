@@ -3,24 +3,25 @@
 ## Before any work
 
 1. Read `memory/PROJECT_CONTEXT.md`
-2. Read `docs/pricing-structure.md` and `docs/kpi-definitions.md`
+2. Read `docs/pricing-structure.md`, `docs/kpi-definitions.md`, and `docs/payment-spillover-price-shocks.md`
 3. Do not invent fare formulas; ask if unclear
 
 ## Mission
 
-Jeeny fare-integrity tracker (v1): PriceCheck shown vs Receipts normalized; classify issue types; split by upfront scenario; digest for Slack DoD/WoW/MoM.
+Jeeny fare-integrity tracker: PriceCheck shown vs Receipts normalized; **NET** price shocks (exclude digital-payment spillover recovery); Slack DoD/WoW/MoM + canvas exceptions.
 
 ## Canonical SQL
 
-- Daily aggregate: `sql/fare_integrity_daily_digest.sql`
+- Daily channel + canvas: `sql/fare_integrity_channel_summary.sql` ← **run this**
+- Headline net shocks: `sql/daily_price_shock_alert.sql`
 - Ride-level debug: `tables schema/draft SQL.sql`
-- Last MCP validation: `docs/validation-run-2026-08-04.md`
+- Spillover: `docs/payment-spillover-price-shocks.md`
 
 ## Tools
 
 - Snowflake MCP (`sql_exec_tool`) — prefer aggregate digests (token-efficient)
-- Slack MCP — after alert thresholds agreed
+- Slack MCP — Pulsar channel + canvas
 
 ## When user shares new facts
 
-Update `docs/pricing-structure.md`, `docs/kpi-definitions.md`, `docs/data-sources.md`, and `memory/PROJECT_CONTEXT.md` in the same session.
+Update `docs/pricing-structure.md`, `docs/kpi-definitions.md`, `docs/data-sources.md`, `docs/payment-spillover-price-shocks.md` (if payment), and `memory/PROJECT_CONTEXT.md` in the same session.

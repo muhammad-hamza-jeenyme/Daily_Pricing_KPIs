@@ -104,15 +104,27 @@ Surcharge can legitimately differ PriceCheck vs Details/Receipts when **dropoff 
 | `Fare_Diff > 0.01` and `Residual > 0.01` | `increase_pricing` |
 | `Fare_Diff < -0.01` | `decrease_pricing` |
 
-Ignore `OUTSTANDINGBALANCE`. Surge/PD: compare PriceChecks vs Details.
+Surge/PD: compare PriceChecks vs Details (both non-null; do not coalesce to 0).
+
+### Digital payment spillover (locked 2026-08-19) — do **not** ignore `OUTSTANDINGBALANCE`
+
+On Apple Pay / Credit Card (and similar digital methods; cash exempt), if underpay remainder ≤ ~**1 SAR** (SA) / ~**0.1 JOD** (JO), no 2nd debit: amount sits in `DETAILS.OUTSTANDINGBALANCE` and is recovered on the **next** ride as `RECEIPTS.CANCELLATIONFINE`. Counting both rides as shocks double-counts the same money.
+
+**Net shock rule:** exclude recovery legs where  
+`prev_outs = LAG(OUTSTANDINGBALANCE) OVER (PARTITION BY PASSENGERID ORDER BY CREATED)`  
+and `prev_outs > 0` and `ABS(prev_outs − CANCELLATIONFINE) ≤ 0.02` (ex-VAT).  
+**LOOKBACK = 30 days** (load-bearing). Full write-up: `docs/payment-spillover-price-shocks.md`.
 
 Threshold seconds: `APPLIEDESTIMATETIME_min * 60 * (1 + pct/100)`.
 
-Daily SQL: `sql/fare_integrity_daily_digest.sql` (aggregate). Ride-level check: `tables schema/draft SQL.sql`.
+Daily channel SQL: `sql/fare_integrity_channel_summary.sql` (NET shocks).  
+Headline alert SQL: `sql/daily_price_shock_alert.sql`.  
+Ride-level check: `tables schema/draft SQL.sql`.
 
 ## Non-issue vs pricing path
 
-- Waiting / prior cancellation fine → non-issue.
+- Waiting / prior cancel fine → non-issue **on the originating ride**.
+- Spillover **recovery** cancel fine on the next ride → **exclude** from Cumulative / Residual shock counts (not a new increase).
 - withinA can still increase if **dropoff ≠ destination** and re-Google raises fare.
 - withinB / BeyondB share increases still tracked (e.g. rising % withinB by area is concerning).
 
@@ -125,5 +137,5 @@ Daily SQL: `sql/fare_integrity_daily_digest.sql` (aggregate). Ride-level check: 
 
 ## Still open
 
-None blocking v1 SQL. Optional later: MinFare column in BI; PriceCheck discounts; alert % thresholds for Slack.  
-Resolved: `FIXEDSPEEDCAP` and `MAXWITHINMINUTESVARIANCE` now on `RIDE.UPFRONT` (2026-08).
+None blocking digests. Optional later: MinFare column in BI; PriceCheck discounts.  
+Resolved: `FIXEDSPEEDCAP` / `MAXWITHINMINUTESVARIANCE` (2026-08); spillover double-count exclusion (2026-08-19).

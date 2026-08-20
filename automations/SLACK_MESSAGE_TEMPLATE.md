@@ -9,13 +9,15 @@ JO distortion usually comes from: (1) reusing SA city headers, (2) uneven paddin
 
 ## Channel KPI tables (this order, both countries)
 
-1. Cumulative PriceShocks %
-2. Residual fare increase %
+1. Cumulative PriceShocks % — **NET** (`Fare_Diff > 0.01`, excludes rounding **and** spillover recovery)
+2. Residual fare increase % — **NET** (`increase_pricing`, excludes spillover recovery)
 3. Rounding error %
 4. Surcharge mismatch %
 5. Pickup mismatch %
 6. Surge mismatch %
 7. PD mismatch %
+
+Spillover recovery rides are **not** a channel table; they are excluded from (1)(2). Spec: `docs/payment-spillover-price-shocks.md`.
 
 ## Table formatting (required — SA and JO)
 
