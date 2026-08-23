@@ -1,63 +1,77 @@
-# Canvas template — Pricing fare-integrity (exception digest)
+# Canvas template — Price-shock breakdown only
 
 **Fixed canvas:** `F0BN0E7RJ31` — https://easytaxime.slack.com/docs/T33U3F6CW/F0BN0E7RJ31
 
 ## Retention
-Keep **current run + previous 2 runs only** (max 3 dated `##` sections). Drop older.
+Keep **current run + previous 2 runs** (max 3 dated `##` sections). Drop older.
 
 ## Each run
-1. Read canvas.
-2. Build today’s section from SQL flags + country trend columns.
-3. Prepend today; keep only newest 3 sections.
-4. Stable title at top: `# Pricing Fare Integrity — watches`
-5. **No definitions, essays, or full city matrices** on canvas.
+1. Run `sql/fare_integrity_canvas_breakdown.sql`
+2. Read canvas → prepend today’s section → keep newest 3 only
+3. Title at top: `# Pricing Fare Integrity — breakdown`
+4. **Only** the tables below — no exceptions, no investigate list, no definitions, no alerts
 
-## Exception rule (hard)
-List a KPI×city (or country Total) **only if** SQL `exception_28d_2sd_* = TRUE`:
-
-`yesterday_rate > avg28 + 2 * sd28`  
-(baseline = 28 complete days ending the day before report date; sample stddev)
-
-Cumulative / Residual rates are **NET of spillover recovery**.
-
-If none fire → write `_No 28d±2σ exceptions_`.
-
-## Today’s section shape
+## Today’s section
 
 ```markdown
 ## YYYY-MM-DD (Weekday)
 
-### Trend (country Total, last 3 runs → oldest) — NET shocks
-SA Cumulative: t2 → t1 → **t0**
-SA Residual:   t2 → t1 → **t0**
-JO Cumulative: …
-JO Residual:   …
+### :flag-sa: SA — NET shock by scenario × dropoff
+(contribution % of all completed rides; rows %inc / DoD / WoW / MoM; cols cities + Others + Total)
 
-Use country rows: `pct_cumulative_shock` / `pct_increase_pricing` = t0, `*_trend_t1`, `*_trend_t2`.
+*WithinA · dropoff at destination:*
+[monospace table]
 
-### Spillover monitor (not a shock)
-SA recovery %: **x.x** · JO: **y.y** (`pct_spillover_recovery`)
-Only call out if clearly elevated vs recent runs.
+*WithinA · dropoff not at destination:*
+[table]
 
-### Exceptions (28d mean + 2σ)
-- `JED` · Residual fare increase % · **…** (avg28 … · σ … · thresh …)
-- …
+*WithinB · dropoff at destination:*
+[table]
 
-### Investigate today
-1. **City · KPI** — why (one line)
-2. Optional second lead
+*WithinB · dropoff not at destination:*
+[table]
 
-If no exceptions: `_No investigate leads — quiet day._`
+*BeyondB:*
+[table]
+
+### :flag-jo: JO — NET shock by scenario × dropoff
+(same 5 tables; JO cities AMM | IRB | ZRQ | Others | Total)
+
+### Cause mix — last day only (GROSS Fare_Diff > 0.01, exclusive, sums to 100%)
+
+*SA — % of fare-increase rides:*
+```
+Cause                        |    %
+-----------------------------|------
+pickup_mismatch              |   x.x
+pd_mismatch                  |   x.x
+surge_mismatch               |   x.x
+surcharge_mismatch           |   x.x
+previous_wallet_balance      |   x.x
+waiting_time                 |   x.x
+withinA_at_dest              |   x.x
+withinA_not_dest             |   x.x
+withinB_at_dest              |   x.x
+withinB_not_dest             |   x.x
+beyondB                      |   x.x
+unclassified                 |   x.x
+```
+(Verify sum ≈ 100.0)
+
+*JO — % of fare-increase rides:*
+[same cause list]
+
+---
 ```
 
-## Do not put on canvas
-- Channel tables / full KPI matrices  
-- Definition glossaries / payment essays (link repo docs if needed)  
-- Quiet KPIs that did not breach 28d+2σ  
+## Table formatting
+- Same monospace rules as channel (`automations/SLACK_MESSAGE_TEMPLATE.md`)
+- Scenario tables: SQL `grain=scenario_city` + `scenario_country` → Total column
+- Cause mix: SQL `grain=cause_mix`, `segment` = cause name, `pct_shock` = %
 
-## Quick defs (agent-only — do not paste onto canvas)
-| KPI | Rule |
-|-----|------|
-| Cumulative / Residual | NET — exclude spillover recovery |
-| Spillover recovery | prior `OUTSTANDINGBALANCE` matched by next-ride `CANCELLATIONFINE` (±0.02) |
-| Spec | `docs/payment-spillover-price-shocks.md` |
+## Definitions (agent-only — do not paste onto canvas)
+| Block | Rule |
+|-------|------|
+| Scenario tables | NET shock contribution: segment ∩ Fare_Diff>0.01 ∩ not spillover / all rides |
+| Cause mix | GROSS Fare_Diff>0.01; exclusive first-match; includes `previous_wallet_balance` (spillover recovery) |
+| Precedence | pickup → PD → surge → surcharge → wallet → waiting → scenario slices → unclassified |

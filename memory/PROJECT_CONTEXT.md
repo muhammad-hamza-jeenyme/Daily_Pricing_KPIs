@@ -1,11 +1,11 @@
 # Project memory — Daily Pricing KPIs
 
-Last updated: 2026-08-20 (spillover NET price shocks)
+Last updated: 2026-08-23 (JO split posts; canvas scenario + cause mix)
 
 ## Mission
 
-Fare-integrity tracker. Cloud Agent **11:00 AM PKT**; SA+JO; channel tables + 3-run canvas.  
-Comparisons: DoD / WoW / MoM (vs 28d prior) + 7d avg (channel warn) + 28d±2σ (canvas).
+Fare-integrity tracker. Cloud Agent **11:00 AM PKT**; SA+JO; **two** channel webhook posts + 3-run canvas breakdown.  
+Comparisons: DoD / WoW / MoM (vs 28d prior).
 
 ## Locked compare
 
@@ -26,8 +26,9 @@ Docs: `docs/payment-spillover-price-shocks.md`
 
 ## SQL
 
-- Channel + canvas: `sql/fare_integrity_channel_summary.sql` ← **daily automation**
-- Headline net shocks: `sql/daily_price_shock_alert.sql`
+- Channel: `sql/fare_integrity_channel_summary.sql`
+- Canvas: `sql/fare_integrity_canvas_breakdown.sql`
+- Headline: `sql/daily_price_shock_alert.sql`
 - Specs: `docs/alert-rules.md`, `automations/DAILY_SLACK_INSTRUCTIONS.md`
 
 ## Slack / automation

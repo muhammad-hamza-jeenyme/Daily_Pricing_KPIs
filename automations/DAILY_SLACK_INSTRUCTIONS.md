@@ -2,85 +2,70 @@
 
 **Use existing automation only** (Pricing KPI Alerts Slack). Do not create a new one.
 
-Paste this entire file into the automation **Instructions**. Repo source of truth: `muhammad-hamza-jeenyme/Daily_Pricing_KPIs` @ `main`.
+Paste this entire file into the automation **Instructions**. Repo: `muhammad-hamza-jeenyme/Daily_Pricing_KPIs` @ `main`.
 
 ## Goal
-Daily **11:00 AM PKT** (`0 6 * * *` UTC): run Snowflake → post **tables-only** Pulsar channel message → update Canvas `F0BN0E7RJ31` (3 runs max, exceptions-only).
-
-**Shock KPIs are NET of digital-payment spillover recovery** (see Definitions). Do not report gross shocks as the headline.
+Daily **11:00 AM PKT** (`0 6 * * *` UTC):
+1. Snowflake channel SQL → **two** Pulsar webhook posts (SA, then JO)
+2. Snowflake canvas SQL → update Canvas `F0BN0E7RJ31` (breakdown tables only; keep last 3 runs)
 
 ## Tools / secrets
 - Snowflake MCP
-- `PULSAR_SLACK_WEBHOOK_URL` — channel post as Pulsar
-- `PULSAR_SLACK_BOT_TOKEN` — canvas (`canvases:read` + `canvases:write`)
-- Canvas ID `F0BN0E7RJ31` (https://easytaxime.slack.com/docs/T33U3F6CW/F0BN0E7RJ31) — **not** a secret
+- `PULSAR_SLACK_WEBHOOK_URL`
+- `PULSAR_SLACK_BOT_TOKEN` (`canvases:read` + `canvases:write`)
+- Canvas `F0BN0E7RJ31` — https://easytaxime.slack.com/docs/T33U3F6CW/F0BN0E7RJ31 (**not** a secret)
 
-## Step 1 — SQL
-Run `sql/fare_integrity_channel_summary.sql` from repo `main`.
+## Step 1 — Channel SQL
+Run `sql/fare_integrity_channel_summary.sql`.
 
-Optional sanity headline: `sql/daily_price_shock_alert.sql` (country `shocks_gross` / `spillover_excluded` / `shocks_net`).
+Use `grain=country` + `grain=city` for report date:
+- `pct_cumulative_shock`, `pct_increase_pricing` (**NET** of spillover)
+- `pct_rounding`, `pct_surcharge_mismatch`, `pct_pickup_mismatch`, `pct_surge_mismatch`, `pct_pd_mismatch`
+- DoD/WoW/MoM pp deltas for each
 
-Use rows `grain=country` and `grain=city` for report date. Key fields:
+Do **not** shrink spillover lookback (30d before window).
 
-| Field | Use |
+## Step 2 — Channel posts (fix JO break)
+Follow `automations/SLACK_MESSAGE_TEMPLATE.md`.
+
+**Must post TWO webhook messages:**
+1. **SA only** — header + 7 tables (Cumulative → Residual → Rounding → Surcharge → Pickup → Surge → PD)
+2. **JO only** — header + same 7 tables + canvas link footer
+
+Never combine SA+JO in one payload (JO fences break after ~2 tables).  
+Each table = own code fence; even number of \`\`\` per message; JO cols `AMM|IRB|ZRQ|Others|Total` only.
+
+## Step 3 — Canvas SQL
+Run `sql/fare_integrity_canvas_breakdown.sql`.
+
+| grain | Use |
 |-------|-----|
-| `pct_cumulative_shock` + DoD/WoW/MoM | Cumulative PriceShocks % (**NET**) |
-| `pct_increase_pricing` + deltas | Residual fare increase % (**NET**) |
-| `pct_spillover_recovery` | Canvas / sanity only — recovery legs excluded from shocks |
-| `pct_rounding` + deltas | Rounding error % |
-| `pct_*_mismatch` + deltas | Surcharge / Pickup / Surge / PD tables |
-| `exception_28d_2sd_*` | Canvas exceptions (country + city) |
-| `cum_trend_t1/t2`, `res_trend_t1/t2` | Country trend strip (with today’s pct as t0) |
+| `scenario_city` / `scenario_country` | NET shock contribution % by WithinA/B×dropoff + BeyondB; city tables + Total; DoD/WoW/MoM |
+| `cause_mix` | Last-day GROSS fare-increase exclusive % by country (must sum ≈100%) |
 
-**Do not shrink** the SQL spillover lookback (30 days before digest window).
-
-## Step 2 — Channel message (Pulsar webhook)
-Follow `automations/SLACK_MESSAGE_TEMPLATE.md` exactly.
-
-**Must:**
-- SA then JO
-- Header only then **tables** — **no** prose KPI blocks before tables
-- Table order: Cumulative PriceShocks → Residual fare increase → Rounding → Surcharge → Pickup → Surge → PD
-- Every table: rows `%inc` | `DoD` | `WoW` | `MoM`
-- SA cols `RUH|JED|MAD|DMM|MEC|Others|Total`; JO cols **`AMM|IRB|ZRQ|Others|Total` only**
-- Fixed-width monospace; each table in its own code fence; Total = country rate/delta
-- **JO must match SA formatting quality**
-- Footer: canvas link
-- Optional `:warning:` on a **table title** only if that KPI’s country Total `%inc` > prior 7d avg
-
-## Step 3 — Canvas `F0BN0E7RJ31`
+## Step 4 — Canvas update
 Follow `automations/CANVAS_WATCH_TEMPLATE.md`.
 
 **Must:**
-1. Read existing canvas body
-2. Prepend today’s compact section
-3. Keep only **newest 3** dated sections; delete older
-4. **Exceptions only** where `exception_28d_2sd_* = TRUE` (rate > 28d avg + 2× sample σ)
-5. **Trend strip** — country Total Cumulative + Residual (**net**) for last 3 runs
-6. **Investigate today** — 1–2 concrete leads, or quiet-day line
-7. If `pct_spillover_recovery` spikes vs 7d, one line under monitor (not a shock)
-8. **No** definitions, essays, or full matrices on canvas
+1. Prepend today’s dated section; keep newest **3** runs only
+2. Content **only**: SA/JO scenario×dropoff tables + SA/JO cause-mix tables
+3. **No** exceptions, investigate list, trends, definitions, or alerts
 
-## Step 4 — Failures
-- Snowflake fail → one webhook error line
-- Canvas fail → still post channel tables; one-line canvas error note
+## Step 5 — Failures
+Snowflake fail → one webhook error line.  
+Canvas fail → still post channel; one-line canvas note.
 
 ## Definitions (do not invent)
 
-**Cumulative PriceShocks % (NET)** — `Fare_Diff > 0.01` for any reason (waiting, cancel fine on originating ride, additional time, residual pricing, tech bugs), **excluding** rounding and **excluding spillover recovery** rides.
+**NET Cumulative / Residual** — exclude spillover recovery (`prev_outs` match cancel fine ±0.02). Spec: `docs/payment-spillover-price-shocks.md`.
 
-**Residual fare increase % (NET)** — `increase_pricing` (`Fare_Diff > 0.01` AND residual after waiting/cancel `> 0.01`) **and not** spillover recovery.
+**Scenario canvas tables** — contribution: (NET shock ∧ segment) / all completed rides.
 
-**Spillover recovery** — digital underpay parked as `OUTSTANDINGBALANCE` (~1 SAR SA / ~0.1 JOD JO threshold), recovered next ride as `CANCELLATIONFINE` matching prior outs (±0.02, ex-VAT). Cash exempt. Spec: `docs/payment-spillover-price-shocks.md`.
-
-**Rounding error %** — `0 < |Fare_Diff| ≤ 0.01`. Not in Cumulative.
-
-**Surcharge / Pickup / Surge / PD mismatch** — unchanged; see template.
-
-**Canvas exception** — `yesterday > avg28 + 2*sd28`.
+**Cause mix** — among `Fare_Diff > 0.01` (GROSS), exclusive order:  
+pickup → PD → surge → surcharge → previous_wallet_balance → waiting → withinA_at_dest → withinA_not_dest → withinB_at_dest → withinB_not_dest → beyondB → unclassified.
 
 ## Hard constraints
-- Existing automation only; do not create a new automation
-- Never log webhook URL / PAT / bot token
-- Channel = tables; canvas = 3-run exception digest only
-- Always use **NET** Cumulative / Residual (post spillover fix)
+- Existing automation only
+- Never log secrets
+- Two channel webhooks; canvas = breakdown only
+- Token discipline: do not dump full SQL result into Slack; format aggregates only; do not re-query the same SQL twice
