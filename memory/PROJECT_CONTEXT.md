@@ -1,6 +1,6 @@
 # Project memory — Daily Pricing KPIs
 
-Last updated: 2026-08-23 (JO split posts; canvas scenario + cause mix)
+Last updated: 2026-08-31 (PriceShocks pre-agg digest path)
 
 ## Mission
 
@@ -24,14 +24,15 @@ Digital pay (ApplePay / CreditCard; cash exempt): underpay ≤ ~1 SAR / ~0.1 JOD
 Exclude recovery: `prev_outs > 0` AND `ABS(prev_outs − CANCELLATIONFINE) ≤ 0.02`. **LOOKBACK 30d** (load-bearing).  
 Docs: `docs/payment-spillover-price-shocks.md`
 
-## SQL
+## SQL (daily job)
 
-- Channel: `sql/fare_integrity_channel_summary.sql`
-- Canvas: `sql/fare_integrity_canvas_breakdown.sql`
-- Headline: `sql/daily_price_shock_alert.sql`
+- **Canonical daily:** `sql/priceshocks_daily_digest.sql` ← reads `RIDE.PRICESHOCKS`
+- Spec: `docs/priceshocks-table.md`
+- Legacy ride-level (debug only): `sql/fare_integrity_channel_summary.sql`, `sql/fare_integrity_canvas_breakdown.sql`, `sql/daily_price_shock_alert.sql`
 - Specs: `docs/alert-rules.md`, `automations/DAILY_SLACK_INSTRUCTIONS.md`
 
 ## Slack / automation
 
-- Channel: `C0BMWLMR03T` · Pulsar webhook + canvas `F0BN0E7RJ31`
+- Channel: Pulsar webhook + canvas `F0BN0E7RJ31`
 - Existing automation only: **Pricing KPI Alerts Slack** @ 11:00 AM PKT
+- Two webhook posts (SA then JO); canvas = scenario + cause-mix only (keep 3 runs)

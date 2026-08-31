@@ -108,6 +108,6 @@ MoM    |  … |  … |  … |    … |    …
 ## Rules
 
 - Optional `:warning:` on table title if country Total `%inc` > prior 7d avg.
-- SQL: `sql/fare_integrity_channel_summary.sql`
+- SQL: `sql/priceshocks_daily_digest.sql` (`metric_family=CHANNEL`)
 - Never invent numbers.
 - Pre-send JO check: 7 titles, 7 open fences, 7 close fences, every row has JO columns only.

@@ -6,7 +6,7 @@
 Keep **current run + previous 2 runs** (max 3 dated `##` sections). Drop older.
 
 ## Each run
-1. Run `sql/fare_integrity_canvas_breakdown.sql`
+1. Use **SCENARIO** + **CAUSE_MIX** rows from the same `sql/priceshocks_daily_digest.sql` result (no second SQL)
 2. Read canvas → prepend today’s section → keep newest 3 only
 3. Title at top: `# Pricing Fare Integrity — breakdown`
 4. **Only** the tables below — no exceptions, no investigate list, no definitions, no alerts
@@ -66,8 +66,8 @@ unclassified                 |   x.x
 
 ## Table formatting
 - Same monospace rules as channel (`automations/SLACK_MESSAGE_TEMPLATE.md`)
-- Scenario tables: SQL `grain=scenario_city` + `scenario_country` → Total column
-- Cause mix: SQL `grain=cause_mix`, `segment` = cause name, `pct_shock` = %
+- Scenario tables: `metric_family=SCENARIO` city + `Total` (`pct` / DoD / WoW / MoM)
+- Cause mix: `metric_family=CAUSE_MIX`, `city_bucket=Total`, `metric_name` = cause, `pct` = %
 
 ## Definitions (agent-only — do not paste onto canvas)
 | Block | Rule |

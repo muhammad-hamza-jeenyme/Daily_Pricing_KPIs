@@ -5,9 +5,9 @@ alwaysApply: true
 
 # Daily Pricing KPIs (Jeeny)
 
-- v1: fare-integrity digest (PriceCheck vs Receipts); scenarios withinA/withinB/beyondB.
-- Run SQL: `sql/fare_integrity_daily_digest.sql` / channel summary. Schedule: **11:00 AM PKT**.
+- Fare-integrity digest from BI pre-agg `RIDE.PRICESHOCKS`.
+- Daily SQL: `sql/priceshocks_daily_digest.sql` only. Schedule: **11:00 AM PKT**.
 - Comparisons: **DoD**, **WoW**, **MoM = yesterday vs 28 days before**.
-- SA surcharge VAT ×1.15; JO ×1.0. issue_types: matched/rounding/increase_non_issue/increase_pricing/decrease_pricing.
-- Memory: `memory/PROJECT_CONTEXT.md`. Specs: `docs/`. Validation: `docs/validation-run-2026-08-04.md`.
+- CHANNEL Cumulative/Residual = **NET**; SCENARIO = NET contribution; CAUSE_MIX = GROSS exclusive.
+- Memory: `memory/PROJECT_CONTEXT.md`. Specs: `docs/priceshocks-table.md`, `docs/`.
 - Never invent formulas; update docs when SME facts change.
