@@ -1,5 +1,8 @@
 # Slack channel message template (Pulsar — tables only)
 
+**Data source:** `JEENY_PROD.RIDE.PRICESHOCKS` via `sql/priceshocks_daily_digest.sql`  
+(`metric_family = CHANNEL`). Do not recompute ride-level fares in the agent.
+
 **No prose before tables.** Header + table titles + monospace tables only.
 
 ## Critical: JO formatting break (fix)
@@ -11,26 +14,30 @@ Slack often **truncates or breaks fences** when SA+JO are one long message. Afte
 2. **Webhook message 2 — JO only** (all 7 JO tables) + canvas link at the end.
 3. Never put SA and JO in the same webhook payload.
 4. Each table: title line **outside** fence → open ` ``` ` → 5–6 data lines → close ` ``` ` → next title. Count fences: must be **even** per message.
-5. Do not nest fences. Do not use ` ```text ` if it causes issues — plain ` ``` ` is fine.
+5. Do not nest fences. Plain ` ``` ` is fine.
 6. If a fence fails QA, rebuild that country message from scratch before sending.
 
 ## Channel KPI tables (this order, each country)
 
-1. Cumulative PriceShocks % — **NET**
-2. Residual fare increase % — **NET**
-3. Rounding error %
-4. Surcharge mismatch %
-5. Pickup mismatch %
-6. Surge mismatch %
-7. PD mismatch %
+Exact `metric_name` values from PriceShocks:
+
+1. `cumulative_price_shocks_net` — Cumulative PriceShocks % — **NET**
+2. `residual_fare_increase_net` — Residual fare increase % — **NET**
+3. `rounding_error` — Rounding error %
+4. `surcharge_mismatch` — Surcharge mismatch %
+5. `pickup_mismatch` — Pickup mismatch %
+6. `surge_mismatch` — Surge mismatch %
+7. `pd_mismatch` — PD mismatch %
+
+Ignore `spillover_recovery` for channel tables (monitor only).
 
 ## Table formatting
 
 - Fixed-width cells; right-align numbers.
-- Rows: `%inc` | `DoD` | `WoW` | `MoM`
+- Rows: `%inc` (= `pct`) | `DoD` (= `dod_pp`) | `WoW` | `MoM`
 - SA: `City | RUH | JED | MAD | DMM | MEC | Others | Total`
 - JO: `City | AMM | IRB | ZRQ | Others | Total` only
-- **Total** = country grain from SQL
+- **Total** = `city_bucket = Total`
 - Cell widths: label `6`, city `6`, Others `7`, Total `7`
 
 ### SA header
@@ -79,35 +86,12 @@ MoM    |  … |  … |  … |    … |    …
 ```
 *Residual fare increase %:*
 ```
-…same JO grid…
-```
-*Rounding error %:*
-```
-…same JO grid…
-```
-*Surcharge mismatch %:*
-```
-…same JO grid…
-```
-*Pickup mismatch %:*
-```
-…same JO grid…
-```
-*Surge mismatch %:*
-```
-…same JO grid…
-```
-*PD mismatch %:*
-```
-…same JO grid…
+…remaining JO tables…
 ```
 
-:clipboard: *Canvas breakdown:* https://easytaxime.slack.com/docs/T33U3F6CW/F0BN0E7RJ31
+:clipboard: *Canvas breakdown:* F0BN0E7RJ31
 ```
 
-## Rules
+## Canvas link footer (JO message only)
 
-- Optional `:warning:` on table title if country Total `%inc` > prior 7d avg.
-- SQL: `sql/fare_integrity_channel_summary.sql`
-- Never invent numbers.
-- Pre-send JO check: 7 titles, 7 open fences, 7 close fences, every row has JO columns only.
+Use canvas id `F0BN0E7RJ31` (or the live canvas URL). Do not put the bot token in the message.

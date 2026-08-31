@@ -6,10 +6,10 @@
 Keep **current run + previous 2 runs** (max 3 dated `##` sections). Drop older.
 
 ## Each run
-1. Run `sql/fare_integrity_canvas_breakdown.sql`
+1. Use **SCENARIO** + **CAUSE_MIX** rows from `sql/priceshocks_daily_digest.sql` (same run as channel — do not re-query ride-level canvas SQL)
 2. Read canvas → prepend today’s section → keep newest 3 only
 3. Title at top: `# Pricing Fare Integrity — breakdown`
-4. **Only** the tables below — no exceptions, no investigate list, no definitions, no alerts
+4. **Only** the tables below — no exceptions, no investigate list, no definitions, or alerts
 
 ## Today’s section
 
@@ -54,9 +54,8 @@ withinA_not_dest             |   x.x
 withinB_at_dest              |   x.x
 withinB_not_dest             |   x.x
 beyondB                      |   x.x
-unclassified                 |   x.x
 ```
-(Verify sum ≈ 100.0)
+(Verify sum ≈ 100.0; omit empty causes)
 
 *JO — % of fare-increase rides:*
 [same cause list]
@@ -66,12 +65,12 @@ unclassified                 |   x.x
 
 ## Table formatting
 - Same monospace rules as channel (`automations/SLACK_MESSAGE_TEMPLATE.md`)
-- Scenario tables: SQL `grain=scenario_city` + `scenario_country` → Total column
-- Cause mix: SQL `grain=cause_mix`, `segment` = cause name, `pct_shock` = %
+- Scenario: `METRIC_FAMILY=SCENARIO` from PriceShocks digest; `CITY_BUCKET` incl. `Total`
+- Cause mix: `METRIC_FAMILY=CAUSE_MIX`, `CITY_BUCKET=Total`, `METRIC_NAME` = cause, `PCT` = %
 
 ## Definitions (agent-only — do not paste onto canvas)
 | Block | Rule |
 |-------|------|
-| Scenario tables | NET shock contribution: segment ∩ Fare_Diff>0.01 ∩ not spillover / all rides |
-| Cause mix | GROSS Fare_Diff>0.01; exclusive first-match; includes `previous_wallet_balance` (spillover recovery) |
-| Precedence | pickup → PD → surge → surcharge → wallet → waiting → scenario slices → unclassified |
+| Scenario tables | NET shock contribution (pre-computed in `PRICESHOCKS`) |
+| Cause mix | GROSS exclusive mix; includes `previous_wallet_balance` (spillover recovery) |
+| Precedence | pickup → PD → surge → surcharge → wallet → waiting → scenario slices |
