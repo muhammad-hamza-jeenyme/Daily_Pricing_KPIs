@@ -7,18 +7,18 @@ Paste this file into automation **Instructions only after BI cutover**. Repo:
 
 ## Cutover prerequisite
 
-Do not activate v2 until BI has deployed
-`JEENY_PROD.RIDE.PRICESHOCKDISCOUNTS` from
-`sql/bi_price_shock_discounts_daily.sql`, yesterday is present, and all
-`ROW_TYPE='GATE'` rows pass. Until then, keep the active instructions from
+Do not activate v2 until BI has extended `JEENY_PROD.RIDE.PRICESHOCKS` with
+`DISCOUNT` + `GATE` rows from `sql/bi_priceshocks_discount_extension.sql`,
+yesterday’s DISCOUNT rows exist, and all GATE rows for yesterday have
+`rides_flagged = 1` (PASS). Until then, keep
 `automations/DAILY_SLACK_INSTRUCTIONS.md` (v1).
 
 ## Goal
 
 Daily **11:00 AM PKT** (`0 6 * * *` UTC):
 
-1. Read `JEENY_PROD.RIDE.PRICESHOCKS` and
-   `JEENY_PROD.RIDE.PRICESHOCKDISCOUNTS`.
+1. Read **only** `JEENY_PROD.RIDE.PRICESHOCKS` (CHANNEL + SCENARIO + CAUSE_MIX +
+   DISCOUNT + GATE).
 2. Post **two** Pulsar webhooks (SA, then JO).
 3. Update Canvas `F0BN0E7RJ31` with scenario, cause mix, and discount exposure;
    keep the newest three runs.
@@ -36,128 +36,74 @@ Run `sql/priceshocks_daily_digest_v2.sql` once.
 
 It returns `output_kind` and a `payload` OBJECT:
 
-- `status`: freshness for both tables and regression-gate state
+- `status`: freshness + discount readiness + failed gates
 - `digest`: unchanged CHANNEL, SCENARIO, and CAUSE_MIX facts
-- `discount`: post-discount segment/summary facts; absent when a gate fails
-- `gate`: formula, identity, config, reconciliation, and segment checks
+- `discount`: DISCOUNT family facts; withheld when `discount_is_ready = 0`
+- `gate`: GATE family checks (`gate_status` PASS/FAIL)
 
-Read fields from `payload`, for example `payload:country`,
-`payload:metric_name`, `payload:pct`, and `payload:net_shock_pct`.
+Read fields from `payload` (`payload:metric_name`, `payload:pct`,
+`payload:amount_value`, `payload:avg_value`, …).
 
 Never run ride-level SQL in the automation.
 
 ### Freshness
 
-If status `payload:is_ready = 0`, `PRICESHOCKS` is stale:
+If status `payload:is_ready = 0`, PriceShocks CHANNEL data is stale:
 
 1. Post one PriceShocks ETL-lag webhook.
 2. Skip all normal output and canvas.
 3. Stop.
 
-If `payload:max_discount_ride_date < payload:report_date`, preserve the seven
-fare-integrity tables and non-discount canvas sections, post a
-PriceShockDiscounts ETL-lag warning, and withhold discount output.
+If DISCOUNT rows for yesterday are missing, preserve the seven fare-integrity
+tables and non-discount canvas sections, post a discount ETL-lag warning, and
+withhold discount output.
 
 ### Discount regression failure
 
 If `payload:discount_is_ready = 0`:
 
 1. Continue the seven unchanged fare-integrity tables for both markets.
-2. If discount data is stale, post the ETL warning from the prior section;
-   otherwise post
+2. If discount data is stale, post the ETL warning; otherwise post
    `:rotating_light: Discount regression gate failed: {failed_gates}. Discount block withheld.`
 3. Do not render any discount figures.
 4. Update canvas with SCENARIO + CAUSE_MIX only; omit discount tables.
-
-The SQL withholds `output_kind=discount` rows on a gate failure, so stale
-discount figures cannot be formatted accidentally.
 
 ## Step 2 — two country channel posts
 
 Follow `automations/SLACK_MESSAGE_TEMPLATE.md`.
 
-From `output_kind=digest`, `metric_family=CHANNEL`, render these exact metrics:
-
-1. `cumulative_price_shocks_net`
-2. `residual_fare_increase_net`
-3. `rounding_error`
-4. `surcharge_mismatch`
-5. `pickup_mismatch`
-6. `surge_mismatch`
-7. `pd_mismatch`
-
-Ignore `spillover_recovery` in channel tables.
-
-Post exactly two payloads:
-
-1. SA: `RUH|JED|MAD|DMM|MEC|Others|Total`
-2. JO: `AMM|IRB|ZRQ|Others|Total`, then canvas link
-
-Each table has its own balanced code fence. Rows are `%inc`, `DoD`, `WoW`,
-`MoM`. Never combine SA and JO in one payload.
-
-If `discount_is_ready = 1`, append each market's post-discount block:
-
-- `cap_bound_total`: no-buffer rides, post-discount shock rate/share, net excess
-- `pct_bound_total`: post-discount shock rides, gross→net money, absorption
-- `no_discount`: comparison post-discount shock rate
-- worst voucher/promo segment by `net_shock_pct`
-- `promised_not_applied`: discrepancy count
-
-Do not put `net_fare_diff` in the headline Cumulative table. Existing headline
-and bucket figures remain `fare_diff`-based for comparability.
-
-Alert markers:
-
-- `:warning:` when cap-bound ride share rises DoD
-- `:warning:` when a capped segment's net shock rate rises faster than
-  `no_discount`
-- `:warning:` when percentage-bound average `d_discount` moves toward zero
-- `:warning:` when SA+JO promised-not-applied exceeds 200 rides
+From `output_kind=digest`, `metric_family=CHANNEL`, render the seven existing
+fare tables unchanged. Append the discount block only when
+`discount_is_ready = 1`, using the exact DISCOUNT `metric_name` map in the
+Slack template (`cap_bound_total__net_shock`, etc.).
 
 ## Step 3 — canvas
 
-Follow `automations/CANVAS_WATCH_TEMPLATE.md`. From the same query:
+Follow `automations/CANVAS_WATCH_TEMPLATE.md`.
 
-- `SCENARIO`: NET contribution by scenario/dropoff with DoD/WoW/MoM
-- `CAUSE_MIX`: last-day GROSS exclusive mix; verify approximately 100%
-- `DISCOUNT`: segment ride share, gross vs net shock, `d_discount`, money, and
-  absorption, only when `discount_is_ready = 1`
+From the same query: SCENARIO + CAUSE_MIX always; DISCOUNT segment tables only
+when `discount_is_ready = 1`. Prepend today’s section; keep three runs.
 
-Prepend today's section and retain three dated sections. Do not add narrative,
-investigation lists, definitions, or alerts to the canvas.
+For canvas segment rows, use:
+
+- `{segment}__ride_share.pct`
+- `{segment}__gross_shock.pct` / `.amount_value`
+- `{segment}__net_shock.pct` / `.amount_value` / `.avg_value` (avg d_discount)
+- `{segment}__absorption.pct`
 
 ## Failures
 
 - Snowflake failure: one webhook error line.
-- PriceShocks freshness failure: ETL-lag webhook; skip all normal output.
-- PriceShockDiscounts freshness/gate failure: keep unchanged fare tables and
-  non-discount canvas; withhold discount output and post the relevant alert.
-- Canvas failure: still post channel; add one-line canvas failure note.
-
-## Locked definitions
-
-- CHANNEL Cumulative/Residual: spillover-recovery excluded.
-- SCENARIO: contribution to existing Cumulative.
-- CAUSE_MIX: GROSS exclusive existing `fare_diff` causes.
-- DISCOUNT gross: existing `fare_diff`, spillover-recovery excluded.
-- DISCOUNT net: post-discount passenger `net_fare_diff`, spillover-recovery
-  excluded.
-- `d_discount = expected gross discount - actual gross discount`.
-
-Specs:
-
-- `docs/priceshocks-table.md`
-- `docs/price-shock-discounts-bi-handoff.md`
-- `docs/price-shock-discounts-implementation-spec.md`
-- `docs/payment-spillover-price-shocks.md`
-- `docs/pricing-structure.md`
+- CHANNEL freshness failure: ETL-lag webhook; skip all normal output.
+- DISCOUNT missing / GATE fail: keep fare tables + non-discount canvas; withhold
+  discount output and alert.
+- Canvas failure: still post channel; add one-line canvas note.
 
 ## Hard constraints
 
 - Existing automation only
 - One Snowflake query: `sql/priceshocks_daily_digest_v2.sql`
 - Never log secrets
-- Never recompute ride-level fare logic in the agent
+- Never recompute ride-level fare logic
 - Never sum SAR with JOD
 - Never use `PROMOTIONENGINE.DISCOUNTAMOUNT` as expected quote discount

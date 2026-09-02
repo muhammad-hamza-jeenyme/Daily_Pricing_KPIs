@@ -65,8 +65,12 @@ beyondB                      |   x.x
 
 ### Discount exposure — post-discount passenger experience
 
-Use `output_kind=discount`, `row_type=SEGMENT`. Add one table per market.
+Use `output_kind=discount` (`metric_family=DISCOUNT`). Add one table per market.
 Never combine SAR and JOD amounts.
+
+Map each segment via suffix metrics:
+`{segment}__ride_share`, `{segment}__gross_shock`, `{segment}__net_shock`,
+`{segment}__absorption`.
 
 *SA (SAR):*
 ```
@@ -83,9 +87,9 @@ no_discount          |   x.x |    x.x |  x.x |     0.000 |          x.x |       
 *JO (JOD):*
 [same segment table]
 
-Below each market table add one compact line from `SUMMARY` rows:
+Below each market table add one compact line:
 
-`Capped: {cap_bound_total ride_share_pct}% of rides · partly-shielded absorption: {pct_bound_total absorption_pct}% · promised-not-applied: {count}`
+`Capped: {cap_bound_total__ride_share.pct}% of rides · partly-shielded absorption: {pct_bound_total__absorption.pct}% · promised-not-applied: {promised_not_applied.rides_flagged}`
 
 ---
 ```

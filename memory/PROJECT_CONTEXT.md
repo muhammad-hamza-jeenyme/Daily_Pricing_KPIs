@@ -1,6 +1,6 @@
 # Project memory — Daily Pricing KPIs
 
-Last updated: 2026-09-02 (discount-aware companion designed; BI cutover pending)
+Last updated: 2026-09-02 (discount extension into PRICESHOCKS; BI cutover pending)
 
 ## Mission
 
@@ -15,14 +15,15 @@ Comparisons: DoD / WoW / MoM (vs 28d prior).
 
 Pending v2 cutover:
 
-1. BI builds `JEENY_PROD.RIDE.PRICESHOCKDISCOUNTS` from
-   `sql/bi_price_shock_discounts_daily.sql`
-2. Validate yesterday + three mandatory regression gates + two safety checks
+1. BI extends `JEENY_PROD.RIDE.PRICESHOCKS` with `DISCOUNT` + `GATE` from
+   `sql/bi_priceshocks_discount_extension.sql` (adds `AMOUNT_VALUE`,
+   `AVG_VALUE`; does not change CHANNEL/SCENARIO/CAUSE_MIX)
+2. Validate yesterday DISCOUNT rows + all GATE rows PASS
 3. Re-paste `automations/DAILY_SLACK_INSTRUCTIONS_V2.md`
 4. Agent then runs `sql/priceshocks_daily_digest_v2.sql` once per day
 
-Do not change the active automation before the companion table exists. The
-current v1 file remains compatible meanwhile.
+Do not change the active automation before DISCOUNT/GATE rows exist. Keep v1
+on `sql/priceshocks_daily_digest.sql` until then.
 
 Docs: `docs/priceshocks-table.md` · Active v1 instructions:
 `automations/DAILY_SLACK_INSTRUCTIONS.md`

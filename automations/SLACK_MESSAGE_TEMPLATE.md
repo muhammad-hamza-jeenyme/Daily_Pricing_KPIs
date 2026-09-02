@@ -106,46 +106,52 @@ MoM    |  … |  … |  … |    … |    …
 
 ## Discount exposure block
 
-Use `output_kind=discount`. Never mix SAR and JOD. For each country:
+Use `output_kind=discount` rows from `PRICESHOCKS` (`metric_family=DISCOUNT`).
+Never mix SAR and JOD. For each country map these exact `metric_name` values:
 
-- `cap_bound_total` summary row supplies capped rides, post-discount shock
-  rides/rate, passenger excess, and cap-bound ride share.
-- `pct_bound_total` summary row supplies partially shielded shock rides, gross
-  and post-discount excess, and `absorption_pct`.
-- `no_discount` segment supplies the undiscounted post-discount shock rate.
-- Worst segment = highest `net_shock_pct` among the four voucher/promo segment
-  rows; use its `avg_net_excess`.
-- `promised_not_applied` supplies the discrepancy count.
+| Need | `metric_name` | Fields |
+|------|---------------|--------|
+| Cap-bound share | `cap_bound_total__ride_share` | `pct`, `rides_flagged` |
+| Cap-bound shock | `cap_bound_total__net_shock` | `pct`, `rides_flagged`, `rides_denom`, `amount_value` |
+| Undiscounted rate | `no_discount__net_shock` | `pct` |
+| Partly shielded shocks | `pct_bound_total__net_shock` | `rides_flagged`, `amount_value` |
+| Partly shielded gross | `pct_bound_total__gross_shock` | `amount_value` |
+| Absorption | `pct_bound_total__absorption` | `pct` |
+| Promised not applied | `promised_not_applied` | `rides_flagged` |
+| Worst segment | max `pct` among `*_capped__net_shock` / `*_pct_bound__net_shock` | use `amount_value` as avg excess proxy via segment `__gross_shock.avg_value` if needed; prefer segment `__net_shock.pct` and that segment's `__gross_shock.avg_value` |
+
+Currency: SA = SAR, JO = JOD.
 
 Required shape:
 
 ```text
 *Discount exposure (post-discount):*
-No shock buffer: {net_shock_rides}/{rides_total} capped rides shocked
-({net_shock_pct}%; {ride_share_pct}% of all rides)
-Passenger excess: {net_excess_amount} {currency}
-vs {no_discount_net_shock_pct}% on undiscounted rides
-Partly shielded: {net_shock_rides} shock rides
-{gross_excess_amount} → {net_excess_amount} {currency}
-({absorption_pct}% absorbed)
-Worst: {segment} · {net_shock_pct}% · avg {avg_net_excess} {currency}
-Promised but not applied: {promised_not_applied_rides} rides
+No shock buffer: {cap_bound_total__net_shock.rides_flagged}/{cap_bound_total__net_shock.rides_denom} capped rides shocked
+({cap_bound_total__net_shock.pct}%; {cap_bound_total__ride_share.pct}% of all rides)
+Passenger excess: {cap_bound_total__net_shock.amount_value} {currency}
+vs {no_discount__net_shock.pct}% on undiscounted rides
+Partly shielded: {pct_bound_total__net_shock.rides_flagged} shock rides
+{pct_bound_total__gross_shock.amount_value} → {pct_bound_total__net_shock.amount_value} {currency}
+({pct_bound_total__absorption.pct}% absorbed)
+Worst: {segment} · {segment__net_shock.pct}% · avg {segment__gross_shock.avg_value} {currency}
+Promised but not applied: {promised_not_applied.rides_flagged} rides
 ```
 
 Formatting:
 
 - This is plain Slack text, not a code fence.
-- Round rates to 2 decimals, `avg_d_discount` to 3, and currency to 2.
+- Round rates to 2 decimals and currency to 2.
 - Use arrows only between amounts in the same currency.
 - Keep existing headline/table labels unchanged.
 - Do not add `net_fare_diff` to the headline Cumulative table.
-- If combined SA+JO `promised_not_applied_rides > 200`, prefix that line with
+- If combined SA+JO `promised_not_applied.rides_flagged > 200`, prefix that line with
   `:warning:` in both country messages.
-- Prefix the relevant line with `:warning:` when cap-bound share rises DoD, a
-  capped segment's net shock rate rises faster than `no_discount`, or a
-  percentage-bound `avg_d_discount` moves toward zero.
-- Do not label negative `avg_d_discount` as a loss: it means the discount grew
-  and absorbed part of the fare increase.
+- Prefix the relevant line with `:warning:` when
+  `cap_bound_total__ride_share.dod_pp` rises, a capped segment's
+  `__net_shock.dod_pp` rises faster than `no_discount__net_shock`, or a
+  percentage-bound `__net_shock.avg_value` (`avg_d_discount`) moves toward zero.
+- Negative `avg_value` on `__net_shock` means the discount grew and absorbed
+  part of the overrun — not a loss.
 
 ## Canvas link footer (JO message only)
 

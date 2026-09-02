@@ -37,11 +37,10 @@ remain based on locked `fare_diff` for longitudinal comparability.
 
 | File | Use |
 |------|-----|
-| `JEENY_PROD.RIDE.PRICESHOCKS` | BI daily facts (source of truth) |
-| `JEENY_PROD.RIDE.PRICESHOCKDISCOUNTS` | BI discount facts + regression gates (new) |
-| `sql/priceshocks_daily_digest.sql` | Current v1 automation until BI cutover |
-| `sql/priceshocks_daily_digest_v2.sql` | **v2 automation after BI cutover** — one-query consumer of both tables |
-| `sql/bi_price_shock_discounts_daily.sql` | BI build/backfill query for new table |
+| `JEENY_PROD.RIDE.PRICESHOCKS` | BI daily facts (CHANNEL/SCENARIO/CAUSE_MIX + DISCOUNT/GATE) |
+| `sql/priceshocks_daily_digest.sql` | Current v1 automation until DISCOUNT/GATE cutover |
+| `sql/priceshocks_daily_digest_v2.sql` | **v2 automation after cutover** — one-query consumer |
+| `sql/bi_priceshocks_discount_extension.sql` | BI MERGE for DISCOUNT + GATE into PriceShocks |
 | `sql/fare_integrity_channel_summary.sql` | Legacy / debug only |
 | `sql/fare_integrity_canvas_breakdown.sql` | Legacy / debug only |
 | `sql/daily_price_shock_alert.sql` | Optional headline |

@@ -17,14 +17,13 @@ canvas.
 
 ## Canonical data path (daily automation)
 
-1. **BI tables:** `JEENY_PROD.RIDE.PRICESHOCKS` plus, after BI cutover,
-   `JEENY_PROD.RIDE.PRICESHOCKDISCOUNTS`
+1. **BI table:** `JEENY_PROD.RIDE.PRICESHOCKS`
    Docs: `docs/priceshocks-table.md` and
    `docs/price-shock-discounts-bi-handoff.md`
 2. **Thin consumer SQL:** current v1
-   `sql/priceshocks_daily_digest.sql`; v2 after companion deployment
+   `sql/priceshocks_daily_digest.sql`; v2 after DISCOUNT/GATE deploy
    `sql/priceshocks_daily_digest_v2.sql`
-   v2 returns CHANNEL + SCENARIO + CAUSE_MIX + DISCOUNT + regression gates
+   v2 returns CHANNEL + SCENARIO + CAUSE_MIX + DISCOUNT + GATE
 3. **Agent instructions:** v1
    `automations/DAILY_SLACK_INSTRUCTIONS.md`; v2 after BI cutover
    `automations/DAILY_SLACK_INSTRUCTIONS_V2.md`
@@ -33,8 +32,9 @@ canvas.
 
 - `sql/fare_integrity_channel_summary.sql`
 - `sql/fare_integrity_canvas_breakdown.sql`
-- `sql/bi_fare_integrity_daily_facts.sql` (original BI handoff)
-- `sql/bi_price_shock_discounts_daily.sql` (BI build/backfill only; never daily agent)
+- `sql/bi_fare_integrity_daily_facts.sql` (original CHANNEL/SCENARIO/CAUSE_MIX)
+- `sql/bi_priceshocks_discount_extension.sql` (BI MERGE only; never daily agent)
+- `sql/bi_price_shock_discounts_daily.sql` (superseded companion-table draft)
 - `sql/daily_price_shock_alert.sql`
 - Ride-level debug: `tables schema/draft SQL.sql`
 

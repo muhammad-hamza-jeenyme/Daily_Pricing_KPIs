@@ -1,10 +1,9 @@
 -- =============================================================================
--- Daily digest v2: existing fare integrity + post-discount exposure
+-- Daily digest v2: fare integrity + post-discount exposure from PRICESHOCKS
 -- =============================================================================
--- Activate only after BI deploys JEENY_PROD.RIDE.PRICESHOCKDISCOUNTS.
+-- Activate only after BI MERGEs DISCOUNT + GATE rows into
+-- JEENY_PROD.RIDE.PRICESHOCKS (see sql/bi_priceshocks_discount_extension.sql).
 -- Existing automation remains on sql/priceshocks_daily_digest.sql until cutover.
--- One Snowflake statement returns status, existing channel/canvas facts,
--- discount exposure, and regression-gate rows.
 -- =============================================================================
 
 WITH params AS (
@@ -19,40 +18,29 @@ ps_freshness AS (
     SELECT
         MAX(ride_date) AS max_ride_date,
         MAX(computed_at) AS max_computed_at,
-        COUNT(*) AS n_rows
+        COUNT(*) AS n_rows,
+        COUNT_IF(metric_family = 'DISCOUNT') AS n_discount_rows,
+        MAX(IFF(metric_family = 'DISCOUNT', ride_date, NULL))
+            AS max_discount_ride_date
     FROM JEENY_PROD.RIDE.PRICESHOCKS
-),
-
-discount_freshness AS (
-    SELECT
-        MAX(ride_date) AS max_discount_ride_date,
-        MAX(computed_at) AS max_discount_computed_at,
-        COUNT(*) AS n_discount_rows
-    FROM JEENY_PROD.RIDE.PRICESHOCKDISCOUNTS
 ),
 
 gate_status AS (
     SELECT
         COUNT(*) AS gate_row_count,
-        COUNT_IF(d.gate_status = 'FAIL') AS failed_gate_count,
-        COUNT_IF(d.discount_segment = 'gate2_net_fare_identity')
+        COUNT_IF(g.rides_flagged = 0) AS failed_gate_count,
+        COUNT_IF(g.metric_name = 'gate2_net_fare_identity')
             AS identity_gate_count,
-        COUNT_IF(d.discount_segment = 'gate4_priceshocks_reconciliation')
+        COUNT_IF(g.metric_name = 'gate4_priceshocks_reconciliation')
             AS reconciliation_gate_count,
         LISTAGG(
-            IFF(
-                d.gate_status = 'FAIL',
-                d.discount_segment
-                    || COALESCE(':' || d.promotion_id, ''),
-                NULL
-            ),
+            IFF(g.rides_flagged = 0, g.metric_name, NULL),
             ', '
-        ) WITHIN GROUP (ORDER BY d.discount_segment, d.promotion_id)
-            AS failed_gates
-    FROM JEENY_PROD.RIDE.PRICESHOCKDISCOUNTS d
+        ) WITHIN GROUP (ORDER BY g.metric_name) AS failed_gates
+    FROM JEENY_PROD.RIDE.PRICESHOCKS g
     CROSS JOIN params p
-    WHERE d.ride_date = p.report_date
-      AND d.row_type = 'GATE'
+    WHERE g.ride_date = p.report_date
+      AND g.metric_family = 'GATE'
 ),
 
 guard AS (
@@ -61,9 +49,8 @@ guard AS (
         pf.max_ride_date,
         pf.max_computed_at,
         pf.n_rows,
-        df.max_discount_ride_date,
-        df.max_discount_computed_at,
-        df.n_discount_rows,
+        pf.max_discount_ride_date,
+        pf.n_discount_rows,
         gs.failed_gate_count,
         IFF(
             gs.identity_gate_count >= 2
@@ -72,21 +59,16 @@ guard AS (
             COALESCE(gs.failed_gates || ', ', '')
                 || 'missing_required_gate_rows'
         ) AS failed_gates,
+        IFF(pf.max_ride_date >= p.report_date, 1, 0) AS is_ready,
         IFF(
-            pf.max_ride_date >= p.report_date,
-            1, 0
-        ) AS is_ready,
-        IFF(
-            df.max_discount_ride_date >= p.report_date
-            AND
-            gs.failed_gate_count = 0
+            pf.max_discount_ride_date >= p.report_date
+            AND gs.failed_gate_count = 0
             AND gs.identity_gate_count >= 2
             AND gs.reconciliation_gate_count >= 2,
             1, 0
         ) AS discount_is_ready
     FROM params p
     CROSS JOIN ps_freshness pf
-    CROSS JOIN discount_freshness df
     CROSS JOIN gate_status gs
 ),
 
@@ -99,7 +81,9 @@ ps_base AS (
         s.city_bucket,
         s.rides_denom,
         s.rides_flagged,
-        s.pct
+        s.pct,
+        s.amount_value,
+        s.avg_value
     FROM JEENY_PROD.RIDE.PRICESHOCKS s
     CROSS JOIN params p
     WHERE s.ride_date IN (
@@ -107,7 +91,6 @@ ps_base AS (
     )
 ),
 
-/* Existing fare-integrity figures are intentionally unchanged. */
 fare_integrity AS (
     SELECT
         'digest' AS output_kind,
@@ -154,92 +137,67 @@ fare_integrity AS (
        AND m.country = y.country
        AND m.city_bucket = y.city_bucket
     WHERE y.ride_date = p.report_date
-),
-
-discount_base AS (
-    SELECT d.*
-    FROM JEENY_PROD.RIDE.PRICESHOCKDISCOUNTS d
-    CROSS JOIN params p
-    WHERE d.ride_date IN (
-        p.report_date, p.dod_date, p.wow_date, p.mom_date
-    )
+      AND y.metric_family IN ('CHANNEL', 'SCENARIO', 'CAUSE_MIX')
 ),
 
 discount_digest AS (
     SELECT
         'discount' AS output_kind,
-        'DISCOUNT' AS metric_family,
-        y.discount_segment AS metric_name,
+        y.metric_family,
+        y.metric_name,
         y.country,
         y.city_bucket,
-        y.row_type,
-        y.country_rides_total,
-        y.ride_share_pct,
-        ROUND(y.ride_share_pct - d.ride_share_pct, 2) AS ride_share_dod_pp,
-        ROUND(y.ride_share_pct - w.ride_share_pct, 2) AS ride_share_wow_pp,
-        ROUND(y.ride_share_pct - m.ride_share_pct, 2) AS ride_share_mom_pp,
-        y.rides_total,
-        y.gross_shock_rides,
-        y.net_shock_rides,
-        y.gross_shock_pct,
-        y.net_shock_pct,
-        ROUND(y.net_shock_pct - d.net_shock_pct, 2) AS net_shock_dod_pp,
-        ROUND(y.net_shock_pct - w.net_shock_pct, 2) AS net_shock_wow_pp,
-        ROUND(y.net_shock_pct - m.net_shock_pct, 2) AS net_shock_mom_pp,
-        y.gross_excess_amount,
-        y.net_excess_amount,
-        y.avg_gross_excess,
-        y.avg_net_excess,
-        y.avg_d_discount,
-        ROUND(y.avg_d_discount - d.avg_d_discount, 3) AS avg_d_discount_dod,
-        ROUND(y.avg_d_discount - w.avg_d_discount, 3) AS avg_d_discount_wow,
-        ROUND(y.avg_d_discount - m.avg_d_discount, 3) AS avg_d_discount_mom,
-        y.absorption_pct,
-        y.cap_bound_at_quote,
-        y.promised_not_applied_rides,
-        y.currency
-    FROM discount_base y
+        y.rides_denom,
+        y.rides_flagged,
+        y.pct,
+        ROUND(y.pct - d.pct, 2) AS dod_pp,
+        ROUND(y.pct - w.pct, 2) AS wow_pp,
+        ROUND(y.pct - m.pct, 2) AS mom_pp,
+        y.amount_value,
+        ROUND(y.amount_value - d.amount_value, 2) AS amount_dod,
+        y.avg_value,
+        ROUND(y.avg_value - d.avg_value, 3) AS avg_dod
+    FROM ps_base y
     CROSS JOIN params p
-    LEFT JOIN discount_base d
+    LEFT JOIN ps_base d
         ON d.ride_date = p.dod_date
-       AND d.row_type = y.row_type
-       AND d.discount_segment = y.discount_segment
+       AND d.metric_family = y.metric_family
+       AND d.metric_name = y.metric_name
        AND d.country = y.country
-    LEFT JOIN discount_base w
+       AND d.city_bucket = y.city_bucket
+    LEFT JOIN ps_base w
         ON w.ride_date = p.wow_date
-       AND w.row_type = y.row_type
-       AND w.discount_segment = y.discount_segment
+       AND w.metric_family = y.metric_family
+       AND w.metric_name = y.metric_name
        AND w.country = y.country
-    LEFT JOIN discount_base m
+       AND w.city_bucket = y.city_bucket
+    LEFT JOIN ps_base m
         ON m.ride_date = p.mom_date
-       AND m.row_type = y.row_type
-       AND m.discount_segment = y.discount_segment
+       AND m.metric_family = y.metric_family
+       AND m.metric_name = y.metric_name
        AND m.country = y.country
+       AND m.city_bucket = y.city_bucket
     WHERE y.ride_date = p.report_date
-      AND y.row_type IN ('SEGMENT', 'SUMMARY')
+      AND y.metric_family = 'DISCOUNT'
 ),
 
 regression_gates AS (
     SELECT
         'gate' AS output_kind,
-        'REGRESSION' AS metric_family,
-        d.discount_segment AS metric_name,
-        d.country,
-        d.city_bucket,
-        d.promotion_id,
-        d.derived_pct,
-        d.derived_cap_exvat,
-        d.n_uncapped,
-        d.gate_name,
-        d.gate_value,
-        d.gate_threshold,
-        d.gate_status,
-        d.gross_shock_pct AS formula_match_pct,
-        d.net_shock_pct AS vat_match_pct
-    FROM discount_base d
+        y.metric_family,
+        y.metric_name,
+        y.country,
+        y.city_bucket,
+        y.rides_denom,
+        y.rides_flagged,
+        y.pct,
+        y.amount_value,
+        y.avg_value,
+        IFF(y.rides_flagged = 1, 'PASS', 'FAIL') AS gate_status
+    FROM ps_base y
     CROSS JOIN params p
-    WHERE d.ride_date = p.report_date
-      AND d.row_type = 'GATE'
+    WHERE y.ride_date = p.report_date
+      AND y.metric_family = 'GATE'
 ),
 
 status_row AS (
@@ -250,7 +208,6 @@ status_row AS (
         g.max_ride_date,
         g.max_computed_at,
         g.max_discount_ride_date,
-        g.max_discount_computed_at,
         g.n_rows,
         g.n_discount_rows,
         g.failed_gate_count,
@@ -259,7 +216,6 @@ status_row AS (
     FROM guard g
 )
 
-/* VARIANT payload keeps one-statement output stable across row families. */
 SELECT
     s.output_kind,
     OBJECT_CONSTRUCT_KEEP_NULL(
@@ -268,7 +224,6 @@ SELECT
         'max_ride_date', s.max_ride_date,
         'max_computed_at', s.max_computed_at,
         'max_discount_ride_date', s.max_discount_ride_date,
-        'max_discount_computed_at', s.max_discount_computed_at,
         'price_shock_rows', s.n_rows,
         'discount_rows', s.n_discount_rows,
         'failed_gate_count', s.failed_gate_count,
@@ -304,32 +259,16 @@ SELECT
         'metric_name', d.metric_name,
         'country', d.country,
         'city_bucket', d.city_bucket,
-        'row_type', d.row_type,
-        'country_rides_total', d.country_rides_total,
-        'ride_share_pct', d.ride_share_pct,
-        'ride_share_dod_pp', d.ride_share_dod_pp,
-        'ride_share_wow_pp', d.ride_share_wow_pp,
-        'ride_share_mom_pp', d.ride_share_mom_pp,
-        'rides_total', d.rides_total,
-        'gross_shock_rides', d.gross_shock_rides,
-        'net_shock_rides', d.net_shock_rides,
-        'gross_shock_pct', d.gross_shock_pct,
-        'net_shock_pct', d.net_shock_pct,
-        'net_shock_dod_pp', d.net_shock_dod_pp,
-        'net_shock_wow_pp', d.net_shock_wow_pp,
-        'net_shock_mom_pp', d.net_shock_mom_pp,
-        'gross_excess_amount', d.gross_excess_amount,
-        'net_excess_amount', d.net_excess_amount,
-        'avg_gross_excess', d.avg_gross_excess,
-        'avg_net_excess', d.avg_net_excess,
-        'avg_d_discount', d.avg_d_discount,
-        'avg_d_discount_dod', d.avg_d_discount_dod,
-        'avg_d_discount_wow', d.avg_d_discount_wow,
-        'avg_d_discount_mom', d.avg_d_discount_mom,
-        'absorption_pct', d.absorption_pct,
-        'cap_bound_at_quote', d.cap_bound_at_quote,
-        'promised_not_applied_rides', d.promised_not_applied_rides,
-        'currency', d.currency
+        'rides_denom', d.rides_denom,
+        'rides_flagged', d.rides_flagged,
+        'pct', d.pct,
+        'dod_pp', d.dod_pp,
+        'wow_pp', d.wow_pp,
+        'mom_pp', d.mom_pp,
+        'amount_value', d.amount_value,
+        'amount_dod', d.amount_dod,
+        'avg_value', d.avg_value,
+        'avg_dod', d.avg_dod
     )
 FROM discount_digest d
 CROSS JOIN guard g
@@ -344,16 +283,12 @@ SELECT
         'metric_name', r.metric_name,
         'country', r.country,
         'city_bucket', r.city_bucket,
-        'promotion_id', r.promotion_id,
-        'derived_pct', r.derived_pct,
-        'derived_cap_exvat', r.derived_cap_exvat,
-        'n_uncapped', r.n_uncapped,
-        'gate_name', r.gate_name,
-        'gate_value', r.gate_value,
-        'gate_threshold', r.gate_threshold,
-        'gate_status', r.gate_status,
-        'formula_match_pct', r.formula_match_pct,
-        'vat_match_pct', r.vat_match_pct
+        'rides_denom', r.rides_denom,
+        'rides_flagged', r.rides_flagged,
+        'pct', r.pct,
+        'amount_value', r.amount_value,
+        'avg_value', r.avg_value,
+        'gate_status', r.gate_status
     )
 FROM regression_gates r
 

@@ -1,37 +1,27 @@
 # `JEENY_PROD.RIDE.PRICESHOCKS` — BI daily facts table
 
-Status: **live** (validated 2026-08-31). Refresh daily **before 11:00 AM PKT**.
+Status: **live** (validated 2026-08-31). Discount extension pending BI deploy.
+Refresh daily **before 11:00 AM PKT**.
 
 ## Purpose
 
 Pre-aggregated fare-integrity metrics for SA + JO. Cloud Agent reads this table
 instead of re-running ride-level joins. Current v1 uses
-`sql/priceshocks_daily_digest.sql`; discount-aware v2 reads it alongside the
-companion through `sql/priceshocks_daily_digest_v2.sql`.
+`sql/priceshocks_daily_digest.sql`. After discount rows are deployed, v2 uses
+`sql/priceshocks_daily_digest_v2.sql` against the **same table**.
 
 Sample snapshot: `tables schema/Ride PriceShocks.csv`.
 
-## Discount-aware companion (2026-09-02)
+## Discount extension (2026-09-02)
 
-Do not change this table's existing `fare_diff`-based metrics. BI should add
-`JEENY_PROD.RIDE.PRICESHOCKDISCOUNTS` using
-`sql/bi_price_shock_discounts_daily.sql`.
+Do **not** create a companion table. Extend this table:
 
-The companion stores passenger-experienced post-discount analysis:
-
-- six `discount_segment` values and `cap_bound_at_quote`
-- gross `fare_diff` vs post-discount `net_fare_diff`
-- `d_discount`, gross/net excess, and absorption
-- promised-at-quote but not applied discrepancies
-- three mandatory daily regression gates plus exact reconciliation and segment
-  direction safety checks
+1. Keep CHANNEL / SCENARIO / CAUSE_MIX formulas and metric names unchanged.
+2. Add nullable columns `AMOUNT_VALUE`, `AVG_VALUE`.
+3. MERGE rows from `sql/bi_priceshocks_discount_extension.sql` with
+   `METRIC_FAMILY IN ('DISCOUNT','GATE')`.
 
 Handoff: `docs/price-shock-discounts-bi-handoff.md`.
-
-After BI deploys the companion and its gates pass, the automation switches to
-`sql/priceshocks_daily_digest_v2.sql`, which reads both tables in one Snowflake
-statement. Until then, keep the active automation on
-`sql/priceshocks_daily_digest.sql`.
 
 ## Grain
 
@@ -42,19 +32,20 @@ One row per:
 | Column | Type | Notes |
 |--------|------|-------|
 | `RIDE_DATE` | DATE | Saudi calendar ride date |
-| `METRIC_FAMILY` | TEXT | `CHANNEL` \| `SCENARIO` \| `CAUSE_MIX` |
+| `METRIC_FAMILY` | TEXT | `CHANNEL` \| `SCENARIO` \| `CAUSE_MIX` \| `DISCOUNT` \| `GATE` |
 | `METRIC_NAME` | TEXT | See catalogues below |
 | `COUNTRY` | TEXT | `SA` \| `JO` |
 | `CITY_BUCKET` | TEXT | City code, `Others`, or `Total` |
 | `RIDES_DENOM` | NUMBER | Denominator |
-| `RIDES_FLAGGED` | NUMBER | Numerator |
-| `PCT` | NUMBER | `ROUND(100 * flagged / denom, 2)` |
+| `RIDES_FLAGGED` | NUMBER | Numerator (for GATE: 1=PASS, 0=FAIL) |
+| `PCT` | NUMBER | Rate / match % |
+| `AMOUNT_VALUE` | NUMBER(18,2) NULL | Excess money or secondary gate value |
+| `AVG_VALUE` | NUMBER(18,3) NULL | Avg d_discount / avg excess / n_uncapped |
 | `COMPUTED_AT` | TIMESTAMP_LTZ | BI job runtime |
 
-**DoD / WoW / MoM are not stored** — derived in `sql/priceshocks_daily_digest.sql`
-(yesterday vs −1d / −7d / −28d).
+**DoD / WoW / MoM are not stored** — derived in the thin digest SQL.
 
-History depth: currently ~60 ride dates in table (enough for MoM).
+History depth: keep ~60 ride dates (enough for MoM).
 
 ## Metric catalogues (exact names in Snowflake)
 
@@ -85,19 +76,46 @@ Cities: SA `RUH|JED|MAD|DMM|MEC|Others|Total` · JO `AMM|IRB|ZRQ|Others|Total`
 
 `RIDES_DENOM` = GROSS fare-increase rides; `PCT` sums ≈ 100% per country/day.
 
+### DISCOUNT (Slack Output 5 + canvas — country `Total` only)
+
+Prefixes: six segments + `cap_bound_total` + `pct_bound_total`.
+
+Suffixes:
+
+- `__ride_share`
+- `__gross_shock` (`AMOUNT_VALUE` = gross excess, `AVG_VALUE` = avg gross)
+- `__net_shock` (`AMOUNT_VALUE` = net excess, `AVG_VALUE` = avg `d_discount`)
+- `__absorption`
+
+Plus `promised_not_applied` (no suffix).
+
+### GATE (regression — country `Total` only)
+
+`RIDES_FLAGGED = 1` PASS / `0` FAIL.
+
+- `gate1_voucher_formula`
+- `gate1_promo_formula:<PROMOTIONID>`
+- `gate2_net_fare_identity`
+- `gate3_promo_config:<PROMOTIONID>`
+- `gate4_priceshocks_reconciliation`
+- `gate5_segment_direction:<segment>`
+
 ## Agent consumer
 
-**Current v1 SQL:** `sql/priceshocks_daily_digest.sql`.
+**Current v1 SQL:** `sql/priceshocks_daily_digest.sql` (CHANNEL/SCENARIO/CAUSE_MIX).
 
-**After discount BI cutover:** `sql/priceshocks_daily_digest_v2.sql` (one
-Snowflake call across both aggregate tables).
+**After discount rows are live:** `sql/priceshocks_daily_digest_v2.sql` (same table,
+adds DISCOUNT + GATE).
 
-Freshness: `MAX(RIDE_DATE) >= CURRENT_DATE - 1`. If not ready → ETL-lag failure; skip canvas.
+Freshness: `MAX(RIDE_DATE) >= CURRENT_DATE - 1`. If CHANNEL is ready but GATE
+fails or DISCOUNT is missing, fare-integrity posts continue; discount block is
+withheld.
 
 ## Legacy heavy SQL (debug / rebuild only)
 
 - `sql/fare_integrity_channel_summary.sql`
 - `sql/fare_integrity_canvas_breakdown.sql`
-- `sql/bi_fare_integrity_daily_facts.sql` (original BI handoff query)
+- `sql/bi_fare_integrity_daily_facts.sql` (original CHANNEL/SCENARIO/CAUSE_MIX handoff)
+- `sql/bi_price_shock_discounts_daily.sql` (superseded companion-table draft)
 
 Do **not** run these in the daily automation unless PriceShocks is broken.

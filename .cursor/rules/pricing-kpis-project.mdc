@@ -8,7 +8,7 @@ alwaysApply: true
 - Preserve the locked fare-integrity `fare_diff` headline; discount analysis is
   an additive post-discount passenger view (`net_fare_diff`, `d_discount`).
 - Active v1 SQL: `sql/priceshocks_daily_digest.sql`.
-- After BI deploys `JEENY_PROD.RIDE.PRICESHOCKDISCOUNTS`, use
+- After BI MERGEs DISCOUNT/GATE into `JEENY_PROD.RIDE.PRICESHOCKS`, use
   `sql/priceshocks_daily_digest_v2.sql`. Schedule: **11:00 AM PKT**.
 - Comparisons: **DoD**, **WoW**, **MoM = yesterday vs 28 days before**.
 - SA surcharge VAT ×1.15; JO ×1.0. issue_types: matched/rounding/increase_non_issue/increase_pricing/decrease_pricing.
