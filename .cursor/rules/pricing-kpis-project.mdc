@@ -5,9 +5,15 @@ alwaysApply: true
 
 # Daily Pricing KPIs (Jeeny)
 
-- v1: fare-integrity digest (PriceCheck vs Receipts); scenarios withinA/withinB/beyondB.
-- Run SQL: `sql/fare_integrity_daily_digest.sql` / channel summary. Schedule: **11:00 AM PKT**.
+- Preserve the locked fare-integrity `fare_diff` headline; discount analysis is
+  an additive post-discount passenger view (`net_fare_diff`, `d_discount`).
+- Active v1 SQL: `sql/priceshocks_daily_digest.sql`.
+- After BI deploys `JEENY_PROD.RIDE.PRICESHOCKDISCOUNTS`, use
+  `sql/priceshocks_daily_digest_v2.sql`. Schedule: **11:00 AM PKT**.
 - Comparisons: **DoD**, **WoW**, **MoM = yesterday vs 28 days before**.
 - SA surcharge VAT ×1.15; JO ×1.0. issue_types: matched/rounding/increase_non_issue/increase_pricing/decrease_pricing.
-- Memory: `memory/PROJECT_CONTEXT.md`. Specs: `docs/`. Validation: `docs/validation-run-2026-08-04.md`.
+- Keep the 30-day spillover lookback. Never sum SAR and JOD.
+- Memory: `memory/PROJECT_CONTEXT.md`. Discount spec:
+  `docs/price-shock-discounts-implementation-spec.md`. BI handoff:
+  `docs/price-shock-discounts-bi-handoff.md`.
 - Never invent formulas; update docs when SME facts change.
