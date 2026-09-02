@@ -5,9 +5,33 @@ Status: **live** (validated 2026-08-31). Refresh daily **before 11:00 AM PKT**.
 ## Purpose
 
 Pre-aggregated fare-integrity metrics for SA + JO. Cloud Agent reads this table
-(via `sql/priceshocks_daily_digest.sql`) instead of re-running ride-level joins.
+instead of re-running ride-level joins. Current v1 uses
+`sql/priceshocks_daily_digest.sql`; discount-aware v2 reads it alongside the
+companion through `sql/priceshocks_daily_digest_v2.sql`.
 
 Sample snapshot: `tables schema/Ride PriceShocks.csv`.
+
+## Discount-aware companion (2026-09-02)
+
+Do not change this table's existing `fare_diff`-based metrics. BI should add
+`JEENY_PROD.RIDE.PRICESHOCKDISCOUNTS` using
+`sql/bi_price_shock_discounts_daily.sql`.
+
+The companion stores passenger-experienced post-discount analysis:
+
+- six `discount_segment` values and `cap_bound_at_quote`
+- gross `fare_diff` vs post-discount `net_fare_diff`
+- `d_discount`, gross/net excess, and absorption
+- promised-at-quote but not applied discrepancies
+- three mandatory daily regression gates plus exact reconciliation and segment
+  direction safety checks
+
+Handoff: `docs/price-shock-discounts-bi-handoff.md`.
+
+After BI deploys the companion and its gates pass, the automation switches to
+`sql/priceshocks_daily_digest_v2.sql`, which reads both tables in one Snowflake
+statement. Until then, keep the active automation on
+`sql/priceshocks_daily_digest.sql`.
 
 ## Grain
 
@@ -63,7 +87,10 @@ Cities: SA `RUH|JED|MAD|DMM|MEC|Others|Total` · JO `AMM|IRB|ZRQ|Others|Total`
 
 ## Agent consumer
 
-**Canonical daily SQL:** `sql/priceshocks_daily_digest.sql` (one Snowflake call).
+**Current v1 SQL:** `sql/priceshocks_daily_digest.sql`.
+
+**After discount BI cutover:** `sql/priceshocks_daily_digest_v2.sql` (one
+Snowflake call across both aggregate tables).
 
 Freshness: `MAX(RIDE_DATE) >= CURRENT_DATE - 1`. If not ready → ETL-lag failure; skip canvas.
 

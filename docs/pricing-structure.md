@@ -74,7 +74,7 @@ Min fare is inside taximeter config (area-level). Effective fare uses:
 | `VALUE` | Includes SA 15% VAT when applicable; JO has **no** VAT. Conceptually `MAX(BaseFare×Surge, MinFare)×PD×VAT`; MinFare not in BI — use stored `VALUE` |
 | `VAT` | **Not** SA VAT — equals `Receipts.RIDEHAILINGSURCHARGE + Receipts.VATONRIDEHAILINGSURCHARGE` (100/100 on sample) |
 | `SURCHARGE` | Pre-VAT at PriceCheck. Gross for compare: `ROUND(SURCHARGE × 1.15, 2)` in SA, `× 1.0` in JO. May differ from end-of-ride surcharge when dropoff ≠ destination |
-| `DISCOUNT` | Ignore for now (not populated) |
+| `DISCOUNT` | Do not use for quote discount; empirically unpopulated. Reconstruct quote discount from voucher/promotion sources below |
 
 Shown at PriceCheck: `VALUE + VAT + SURCHARGE`  
 `ORIGINALESTIMATEFARE = VALUE` (both include SA VAT when applicable) — 100/100.
@@ -95,6 +95,58 @@ Residual             = Fare_Diff − Non_Issue
 ```
 
 Surcharge can legitimately differ PriceCheck vs Details/Receipts when **dropoff ≠ destination** (re-Google); that gap feeds `increase_pricing` / `decrease_pricing` via Fare_Diff.
+
+## Post-discount passenger experience (added 2026-09-02)
+
+The existing `Fare_Diff` and all current buckets remain unchanged. Add a second
+view for what the passenger experienced:
+
+```
+vatf = IFF(SA, 1.15, 1.00)
+
+Quote_Base_exVAT =
+    ROUND(PriceChecks.VALUE / vatf, 2)
+  + ROUND(PriceChecks.VAT / vatf, 2)
+  + PriceChecks.SURCHARGE
+
+Expected_Disc_Gross =
+    Expected_Disc_exVAT
+  + ROUND(Expected_Disc_exVAT * (vatf - 1), 2)
+
+PriceCheck_Net = PriceCheck_Shown - Expected_Disc_Gross
+Charged_Net    = Receipts.TOTALAMOUNTWITHTAX
+Net_Fare_Diff  = Charged_Net - PriceCheck_Net
+d_discount     = Expected_Disc_Gross
+               - (Receipts.DISCOUNT + Receipts.VATONDISCOUNT)
+```
+
+Identity: `Net_Fare_Diff = Fare_Diff + d_discount` (tolerance 0.011).
+
+Discount sources:
+
+- Voucher: `PASSENGERS.PRICECHECKKAFKAWITHPROMO`, aggregated to one row per
+  `TRACEID`; `MAXIMUMDISCOUNT` is VAT-inclusive.
+- Promotion engine: `PASSENGERS.PROMOTIONENGINE` by `RIDEID`; infer rate and
+  ex-VAT cap per `PROMOTIONID` from trailing-seven-day behaviour. Its
+  `DISCOUNTAMOUNT` is final, not quote-time expected discount.
+- Voucher takes precedence if both sources occur; never sum them.
+- `PASSENGERS.SAVINGS` and `DETAILS.PAYMENTVOUCHERDISCOUNT` are not fare
+  discount sources for this comparison.
+
+Final discountable base:
+
+`RIDEVALUE + RIDEHAILINGSURCHARGE + SURCHARGE + INTERCITYSURCHARGE + WAITINGTIMEFEE`
+
+Waiting time is discountable. Cancellation fine and wallet balance are not.
+Gross discount VAT must be rounded separately; do not multiply the total by
+1.15. The SA hailing surcharge remains 0.50 ex-VAT + 0.08 VAT = 0.58 gross.
+
+Six segments: `voucher_capped`, `voucher_pct_bound`, `promoeng_capped`,
+`promoeng_pct_bound`, `discount_no_source`, `no_discount`.
+
+Full formula and BI implementation:
+`docs/price-shock-discounts-implementation-spec.md` and
+`docs/price-shock-discounts-bi-handoff.md`.
 
 | Condition | `issue_type` |
 |-----------|----------------|
@@ -117,8 +169,10 @@ and `prev_outs > 0` and `ABS(prev_outs − CANCELLATIONFINE) ≤ 0.02` (ex-VAT).
 
 Threshold seconds: `APPLIEDESTIMATETIME_min * 60 * (1 + pct/100)`.
 
-Daily channel SQL: `sql/fare_integrity_channel_summary.sql` (NET shocks).  
-Headline alert SQL: `sql/daily_price_shock_alert.sql`.  
+Daily active v1 SQL: `sql/priceshocks_daily_digest.sql`.
+Post-discount v2 after BI cutover: `sql/priceshocks_daily_digest_v2.sql`.
+Legacy/debug: `sql/fare_integrity_channel_summary.sql` and
+`sql/daily_price_shock_alert.sql`.
 Ride-level check: `tables schema/draft SQL.sql`.
 
 ## Non-issue vs pricing path

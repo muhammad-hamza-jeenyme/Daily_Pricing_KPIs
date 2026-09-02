@@ -1,9 +1,12 @@
-# Slack channel message template (Pulsar — tables only)
+# Slack channel message template (Pulsar — fare tables + discount exposure)
 
-**Data source:** `JEENY_PROD.RIDE.PRICESHOCKS` via `sql/priceshocks_daily_digest.sql`  
-(`metric_family = CHANNEL`). Do not recompute ride-level fares in the agent.
+**Data source:** `JEENY_PROD.RIDE.PRICESHOCKS` +
+`JEENY_PROD.RIDE.PRICESHOCKDISCOUNTS` via
+`sql/priceshocks_daily_digest_v2.sql`. Do not recompute ride-level fares in the
+agent.
 
-**No prose before tables.** Header + table titles + monospace tables only.
+**No prose before fare tables.** Append the compact discount block after each
+country's seven fare tables.
 
 ## Critical: JO formatting break (fix)
 
@@ -30,6 +33,9 @@ Exact `metric_name` values from PriceShocks:
 7. `pd_mismatch` — PD mismatch %
 
 Ignore `spillover_recovery` for channel tables (monitor only).
+
+These seven tables remain based on the locked `fare_diff`; do not replace them
+with `net_fare_diff`. Post-discount passenger impact is shown separately below.
 
 ## Table formatting
 
@@ -68,6 +74,9 @@ City   |  AMM  |  IRB  |  ZRQ  | Others |  Total
 …SA table…
 ```
 …Rounding, Surcharge, Pickup, Surge, PD — each with its own open/close fence…
+
+*Discount exposure (post-discount):*
+…SA compact block defined below…
 ```
 
 ## Message 2 shape (JO only)
@@ -89,8 +98,54 @@ MoM    |  … |  … |  … |    … |    …
 …remaining JO tables…
 ```
 
+*Discount exposure (post-discount):*
+…JO compact block defined below…
+
 :clipboard: *Canvas breakdown:* F0BN0E7RJ31
 ```
+
+## Discount exposure block
+
+Use `output_kind=discount`. Never mix SAR and JOD. For each country:
+
+- `cap_bound_total` summary row supplies capped rides, post-discount shock
+  rides/rate, passenger excess, and cap-bound ride share.
+- `pct_bound_total` summary row supplies partially shielded shock rides, gross
+  and post-discount excess, and `absorption_pct`.
+- `no_discount` segment supplies the undiscounted post-discount shock rate.
+- Worst segment = highest `net_shock_pct` among the four voucher/promo segment
+  rows; use its `avg_net_excess`.
+- `promised_not_applied` supplies the discrepancy count.
+
+Required shape:
+
+```text
+*Discount exposure (post-discount):*
+No shock buffer: {net_shock_rides}/{rides_total} capped rides shocked
+({net_shock_pct}%; {ride_share_pct}% of all rides)
+Passenger excess: {net_excess_amount} {currency}
+vs {no_discount_net_shock_pct}% on undiscounted rides
+Partly shielded: {net_shock_rides} shock rides
+{gross_excess_amount} → {net_excess_amount} {currency}
+({absorption_pct}% absorbed)
+Worst: {segment} · {net_shock_pct}% · avg {avg_net_excess} {currency}
+Promised but not applied: {promised_not_applied_rides} rides
+```
+
+Formatting:
+
+- This is plain Slack text, not a code fence.
+- Round rates to 2 decimals, `avg_d_discount` to 3, and currency to 2.
+- Use arrows only between amounts in the same currency.
+- Keep existing headline/table labels unchanged.
+- Do not add `net_fare_diff` to the headline Cumulative table.
+- If combined SA+JO `promised_not_applied_rides > 200`, prefix that line with
+  `:warning:` in both country messages.
+- Prefix the relevant line with `:warning:` when cap-bound share rises DoD, a
+  capped segment's net shock rate rises faster than `no_discount`, or a
+  percentage-bound `avg_d_discount` moves toward zero.
+- Do not label negative `avg_d_discount` as a loss: it means the discount grew
+  and absorbed part of the fare increase.
 
 ## Canvas link footer (JO message only)
 

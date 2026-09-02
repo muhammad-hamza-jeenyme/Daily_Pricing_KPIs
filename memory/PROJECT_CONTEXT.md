@@ -1,6 +1,6 @@
 # Project memory — Daily Pricing KPIs
 
-Last updated: 2026-08-31 (PriceShocks BI table → thin daily digest)
+Last updated: 2026-09-02 (discount-aware companion designed; BI cutover pending)
 
 ## Mission
 
@@ -13,7 +13,19 @@ Comparisons: DoD / WoW / MoM (vs 28d prior).
 2. Agent runs **only** `sql/priceshocks_daily_digest.sql` (DoD/WoW/MoM on top of table)
 3. Formats two Pulsar posts + canvas from that result
 
-Docs: `docs/priceshocks-table.md` · Instructions: `automations/DAILY_SLACK_INSTRUCTIONS.md`
+Pending v2 cutover:
+
+1. BI builds `JEENY_PROD.RIDE.PRICESHOCKDISCOUNTS` from
+   `sql/bi_price_shock_discounts_daily.sql`
+2. Validate yesterday + three mandatory regression gates + two safety checks
+3. Re-paste `automations/DAILY_SLACK_INSTRUCTIONS_V2.md`
+4. Agent then runs `sql/priceshocks_daily_digest_v2.sql` once per day
+
+Do not change the active automation before the companion table exists. The
+current v1 file remains compatible meanwhile.
+
+Docs: `docs/priceshocks-table.md` · Active v1 instructions:
+`automations/DAILY_SLACK_INSTRUCTIONS.md`
 
 ## Locked compare (implemented inside BI table)
 
@@ -22,6 +34,28 @@ Docs: `docs/priceshocks-table.md` · Instructions: `automations/DAILY_SLACK_INST
 - Norm receipt = `RR.TOTALAMOUNTWITHTAX + DISCOUNT + VATONDISCOUNT`
 - **Cumulative / Residual shocks = NET** of spillover recovery
 - Prod scenario: `withinA` | `withinB` | `beyondB`
+
+## Discount view (locked 2026-09-02)
+
+- Keep every existing `fare_diff` headline/bucket unchanged.
+- Add passenger-experienced:
+  `net_fare_diff = charged_net - (pc_shown - expected_disc_gross)`.
+- `d_discount = expected_disc_gross - actual_disc_gross`.
+- Assert `net_fare_diff = fare_diff + d_discount` at 0.011 tolerance.
+- Voucher cap is VAT-inclusive; promotion-engine inferred cap is ex-VAT.
+- Build quote base component-wise; gross discount by separately rounded VAT.
+- Final discountable base includes `WAITINGTIMEFEE`, excludes cancellation fine
+  and wallet balance.
+- Six segments: voucher/promo capped or pct-bound, discount_no_source,
+  no_discount.
+- Voucher takes precedence; never sum voucher + promotion engine.
+- Mandatory gates: applied formula/VAT >=99.9%, identity >=99.99%, every
+  promotion config has >=50 uncapped observations. Additional exact
+  reconciliation and segment-direction safety checks also fail discount output.
+- Slack keeps 7 current fare tables and appends post-discount exposure per
+  market. Canvas adds discount segment tables.
+- Specs: `docs/price-shock-discounts-implementation-spec.md` and
+  `docs/price-shock-discounts-bi-handoff.md`.
 
 ## Spillover double-count (2026-08-19)
 
@@ -32,4 +66,6 @@ Docs: `docs/payment-spillover-price-shocks.md`
 
 - Channel: `C0BMWLMR03T` · Pulsar webhook + canvas `F0BN0E7RJ31`
 - Existing automation only: **Pricing KPI Alerts Slack** @ 11:00 AM PKT
-- After each instructions change: **re-paste** `DAILY_SLACK_INSTRUCTIONS.md` into the automation
+- Before BI cutover, keep v1 `DAILY_SLACK_INSTRUCTIONS.md` active.
+- After BI validates the companion table, re-paste
+  `DAILY_SLACK_INSTRUCTIONS_V2.md`.
