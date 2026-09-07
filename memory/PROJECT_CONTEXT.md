@@ -1,32 +1,28 @@
 # Project memory — Daily Pricing KPIs
 
-Last updated: 2026-09-02 (discount extension into PRICESHOCKS; BI cutover pending)
+Last updated: 2026-09-07 (v2 cutover — BI full PRICESHOCKS rebuild live)
 
 ## Mission
 
 Fare-integrity tracker. Cloud Agent **11:00 AM PKT**; SA+JO; **two** channel webhook posts + 3-run canvas breakdown.  
 Comparisons: DoD / WoW / MoM (vs 28d prior).
 
-## Daily data path (efficient)
+## Daily data path (efficient) — ACTIVE
 
-1. BI materializes `JEENY_PROD.RIDE.PRICESHOCKS` before 11:00 AM PKT
-2. Agent runs **only** `sql/priceshocks_daily_digest.sql` (DoD/WoW/MoM on top of table)
-3. Formats two Pulsar posts + canvas from that result
+1. BI runs **one** query `sql/bi_priceshocks_daily.sql`, deletes prior
+   `JEENY_PROD.RIDE.PRICESHOCKS` rows, inserts full result (30-day window)
+   before 11:00 AM PKT — CHANNEL + SCENARIO + CAUSE_MIX + DISCOUNT + GATE
+2. Agent runs **`sql/priceshocks_daily_digest_v2.sql`** once
+3. Formats two Pulsar posts + canvas (fare tables + discount block when gates PASS)
 
-Pending v2 cutover:
+Validated 2026-09-07 against live table + `tables schema/Ride PriceShocks.csv`:
+- 30 dates through 2026-09-06; all five families present
+- CHANNEL city buckets present; yesterday GATE all PASS
+- Guard: `is_ready=1`, `discount_is_ready=1`
 
-1. BI extends `JEENY_PROD.RIDE.PRICESHOCKS` with `DISCOUNT` + `GATE` from
-   `sql/bi_priceshocks_discount_extension.sql` (adds `AMOUNT_VALUE`,
-   `AVG_VALUE`; does not change CHANNEL/SCENARIO/CAUSE_MIX)
-2. Validate yesterday DISCOUNT rows + all GATE rows PASS
-3. Re-paste `automations/DAILY_SLACK_INSTRUCTIONS_V2.md`
-4. Agent then runs `sql/priceshocks_daily_digest_v2.sql` once per day
-
-Do not change the active automation before DISCOUNT/GATE rows exist. Keep v1
-on `sql/priceshocks_daily_digest.sql` until then.
-
-Docs: `docs/priceshocks-table.md` · Active v1 instructions:
-`automations/DAILY_SLACK_INSTRUCTIONS.md`
+Docs: `docs/priceshocks-table.md` · BI handoff:
+`docs/price-shock-discounts-bi-handoff.md` · Active instructions:
+`automations/DAILY_SLACK_INSTRUCTIONS_V2.md`
 
 ## Locked compare (implemented inside BI table)
 
@@ -50,9 +46,7 @@ Docs: `docs/priceshocks-table.md` · Active v1 instructions:
 - Six segments: voucher/promo capped or pct-bound, discount_no_source,
   no_discount.
 - Voucher takes precedence; never sum voucher + promotion engine.
-- Mandatory gates: applied formula/VAT >=99.9%, identity >=99.99%, every
-  promotion config has >=50 uncapped observations. Additional exact
-  reconciliation and segment-direction safety checks also fail discount output.
+- Promo campaigns pooled in DISCOUNT/GATE (no per-PROMOTIONID rows).
 - Slack keeps 7 current fare tables and appends post-discount exposure per
   market. Canvas adds discount segment tables.
 - Specs: `docs/price-shock-discounts-implementation-spec.md` and
@@ -67,6 +61,6 @@ Docs: `docs/payment-spillover-price-shocks.md`
 
 - Channel: `C0BMWLMR03T` · Pulsar webhook + canvas `F0BN0E7RJ31`
 - Existing automation only: **Pricing KPI Alerts Slack** @ 11:00 AM PKT
-- Before BI cutover, keep v1 `DAILY_SLACK_INSTRUCTIONS.md` active.
-- After BI validates the companion table, re-paste
-  `DAILY_SLACK_INSTRUCTIONS_V2.md`.
+- **Active instructions:** `automations/DAILY_SLACK_INSTRUCTIONS_V2.md`
+- Enable steps: `automations/USE_EXISTING_AUTOMATION.md`
+- v1 (`DAILY_SLACK_INSTRUCTIONS.md` + `priceshocks_daily_digest.sql`) superseded

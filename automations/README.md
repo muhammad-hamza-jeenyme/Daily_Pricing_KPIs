@@ -10,21 +10,19 @@ The digest must run **even when your laptop is off**. Use a **Cursor Cloud Autom
 |------|-------|
 | Cadence | Daily |
 | Time | **11:00 AM PKT** → cron `0 6 * * *` UTC |
-| Job | Read `PRICESHOCKS` + discount companion → two Pulsar posts + canvas |
+| Job | Read `PRICESHOCKS` → two Pulsar posts + canvas |
 
-## Status
+## Status (2026-09-07)
 
 - [x] Channel `C0BMWLMR03T`
-- [x] BI table `JEENY_PROD.RIDE.PRICESHOCKS` (refresh before 11:00 AM PKT)
-- [x] Thin digest SQL: `sql/priceshocks_daily_digest.sql`
-- [x] Discount BI handoff:
-  `sql/bi_priceshocks_discount_extension.sql` +
-  `docs/price-shock-discounts-bi-handoff.md`
-- [x] v2 thin digest SQL: `sql/priceshocks_daily_digest_v2.sql`
-- [x] v2 bot instructions: `automations/DAILY_SLACK_INSTRUCTIONS_V2.md`
-- [ ] BI MERGE DISCOUNT/GATE into `PRICESHOCKS` and pass all gates
-- [ ] Re-paste v2 instructions into **Pricing KPI Alerts Slack** only after BI cutover
+- [x] BI table `JEENY_PROD.RIDE.PRICESHOCKS` full rebuild live
+- [x] BI query: `sql/bi_priceshocks_daily.sql`
+- [x] Thin digest SQL: `sql/priceshocks_daily_digest_v2.sql`
+- [x] Bot instructions: `automations/DAILY_SLACK_INSTRUCTIONS_V2.md`
+- [x] Yesterday GATE PASS + DISCOUNT ready (`discount_is_ready=1`)
+- [ ] User re-enables **Pricing KPI Alerts Slack** after pasting v2 instructions
 
-## Edit automation
+## Edit / enable automation
 
-**Do not create a new automation.** Edit **Pricing KPI Alerts Slack** only — see `automations/USE_EXISTING_AUTOMATION.md`.
+**Do not create a new automation.** Edit **Pricing KPI Alerts Slack** only — see
+`automations/USE_EXISTING_AUTOMATION.md`.

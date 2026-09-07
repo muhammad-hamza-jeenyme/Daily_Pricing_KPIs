@@ -1,9 +1,8 @@
 -- =============================================================================
 -- Daily digest v2: fare integrity + post-discount exposure from PRICESHOCKS
 -- =============================================================================
--- Activate only after BI MERGEs DISCOUNT + GATE rows into
--- JEENY_PROD.RIDE.PRICESHOCKS (see sql/bi_priceshocks_discount_extension.sql).
--- Existing automation remains on sql/priceshocks_daily_digest.sql until cutover.
+-- ACTIVE daily consumer (2026-09-07 cutover).
+-- Source table rebuilt by BI from sql/bi_priceshocks_daily.sql.
 -- =============================================================================
 
 WITH params AS (

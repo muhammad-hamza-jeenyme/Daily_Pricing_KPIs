@@ -1,27 +1,19 @@
 # `JEENY_PROD.RIDE.PRICESHOCKS` — BI daily facts table
 
-Status: **live** (validated 2026-08-31). Discount extension pending BI deploy.
+Status: **live** — full rebuild validated 2026-09-07 (v2 agent cutover).  
 Refresh daily **before 11:00 AM PKT**.
 
 ## Purpose
 
-Pre-aggregated fare-integrity metrics for SA + JO. Cloud Agent reads this table
-instead of re-running ride-level joins. Current v1 uses
-`sql/priceshocks_daily_digest.sql`. After discount rows are deployed, v2 uses
-`sql/priceshocks_daily_digest_v2.sql` against the **same table**.
+Pre-aggregated fare-integrity **and** discount metrics for SA + JO. Cloud Agent
+reads this table only (no ride-level joins in the daily job).
 
-Sample snapshot: `tables schema/Ride PriceShocks.csv`.
+**Canonical BI query:** `sql/bi_priceshocks_daily.sql`  
+**Handoff:** `docs/price-shock-discounts-bi-handoff.md`  
+**Sample snapshot:** `tables schema/Ride PriceShocks.csv` (2026-09-07)
 
-## Discount extension (2026-09-02)
-
-Do **not** create a companion table. Extend this table:
-
-1. Keep CHANNEL / SCENARIO / CAUSE_MIX formulas and metric names unchanged.
-2. Add nullable columns `AMOUNT_VALUE`, `AVG_VALUE`.
-3. MERGE rows from `sql/bi_priceshocks_discount_extension.sql` with
-   `METRIC_FAMILY IN ('DISCOUNT','GATE')`.
-
-Handoff: `docs/price-shock-discounts-bi-handoff.md`.
+BI **deletes prior data** and inserts the full query output each day (30-day
+fact window). One query covers Slack city/issue tables **and** discount block.
 
 ## Grain
 
@@ -40,12 +32,14 @@ One row per:
 | `RIDES_FLAGGED` | NUMBER | Numerator (for GATE: 1=PASS, 0=FAIL) |
 | `PCT` | NUMBER | Rate / match % |
 | `AMOUNT_VALUE` | NUMBER(18,2) NULL | Excess money or secondary gate value |
-| `AVG_VALUE` | NUMBER(18,3) NULL | Avg d_discount / avg excess / n_uncapped |
+| `AVG_VALUE` | NUMBER(18,3) NULL | Avg d_discount / avg excess / helper |
 | `COMPUTED_AT` | TIMESTAMP_LTZ | BI job runtime |
 
 **DoD / WoW / MoM are not stored** — derived in the thin digest SQL.
 
-History depth: keep ~60 ride dates (enough for MoM).
+History depth: **30** ride dates (enough for MoM = vs 28 days before).
+
+Spillover lookback inside the build query: **30 days before** fact `win_start`.
 
 ## Metric catalogues (exact names in Snowflake)
 
@@ -94,28 +88,33 @@ Plus `promised_not_applied` (no suffix).
 `RIDES_FLAGGED = 1` PASS / `0` FAIL.
 
 - `gate1_voucher_formula`
-- `gate1_promo_formula:<PROMOTIONID>`
+- `gate1_promo_formula` (all campaigns pooled)
 - `gate2_net_fare_identity`
-- `gate3_promo_config:<PROMOTIONID>`
-- `gate4_priceshocks_reconciliation`
+- `gate3_promo_config` (all campaigns pooled)
+- `gate4_priceshocks_reconciliation` (vs same-run CHANNEL Total)
 - `gate5_segment_direction:<segment>`
 
 ## Agent consumer
 
-**Current v1 SQL:** `sql/priceshocks_daily_digest.sql` (CHANNEL/SCENARIO/CAUSE_MIX).
+**ACTIVE:** `sql/priceshocks_daily_digest_v2.sql` +
+`automations/DAILY_SLACK_INSTRUCTIONS_V2.md`
 
-**After discount rows are live:** `sql/priceshocks_daily_digest_v2.sql` (same table,
-adds DISCOUNT + GATE).
+**Superseded:** `sql/priceshocks_daily_digest.sql` +
+`automations/DAILY_SLACK_INSTRUCTIONS.md`
 
 Freshness: `MAX(RIDE_DATE) >= CURRENT_DATE - 1`. If CHANNEL is ready but GATE
 fails or DISCOUNT is missing, fare-integrity posts continue; discount block is
 withheld.
 
-## Legacy heavy SQL (debug / rebuild only)
+## Superseded handoff SQL (do not give to BI)
+
+- `sql/bi_fare_integrity_daily_facts.sql` — CHANNEL/SCENARIO/CAUSE_MIX only
+- `sql/bi_priceshocks_discount_extension.sql` — DISCOUNT/GATE only
+- `sql/bi_price_shock_discounts_daily.sql` — companion-table draft
+
+## Legacy heavy SQL (debug only)
 
 - `sql/fare_integrity_channel_summary.sql`
 - `sql/fare_integrity_canvas_breakdown.sql`
-- `sql/bi_fare_integrity_daily_facts.sql` (original CHANNEL/SCENARIO/CAUSE_MIX handoff)
-- `sql/bi_price_shock_discounts_daily.sql` (superseded companion-table draft)
 
 Do **not** run these in the daily automation unless PriceShocks is broken.

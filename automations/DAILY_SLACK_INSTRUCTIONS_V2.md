@@ -1,17 +1,12 @@
-# Pulsar daily fare-integrity + discount exposure (Cloud Automation v2)
+# Pulsar daily fare-integrity + discount exposure (Cloud Automation v2 — ACTIVE)
 
 **Use existing automation only** (Pricing KPI Alerts Slack). Do not create a new one.
 
-Paste this file into automation **Instructions only after BI cutover**. Repo:
-`muhammad-hamza-jeenyme/Daily_Pricing_KPIs` @ `main`.
+**Status (2026-09-07):** BI full rebuild of `JEENY_PROD.RIDE.PRICESHOCKS` is live
+(CHANNEL + SCENARIO + CAUSE_MIX + DISCOUNT + GATE). Paste this entire file into
+the automation **Instructions**, then re-enable the schedule.
 
-## Cutover prerequisite
-
-Do not activate v2 until BI has extended `JEENY_PROD.RIDE.PRICESHOCKS` with
-`DISCOUNT` + `GATE` rows from `sql/bi_priceshocks_discount_extension.sql`,
-yesterday’s DISCOUNT rows exist, and all GATE rows for yesterday have
-`rides_flagged = 1` (PASS). Until then, keep
-`automations/DAILY_SLACK_INSTRUCTIONS.md` (v1).
+Repo: `muhammad-hamza-jeenyme/Daily_Pricing_KPIs` @ `main`.
 
 ## Goal
 
@@ -37,12 +32,12 @@ Run `sql/priceshocks_daily_digest_v2.sql` once.
 It returns `output_kind` and a `payload` OBJECT:
 
 - `status`: freshness + discount readiness + failed gates
-- `digest`: unchanged CHANNEL, SCENARIO, and CAUSE_MIX facts
+- `digest`: CHANNEL, SCENARIO, and CAUSE_MIX facts (city buckets included)
 - `discount`: DISCOUNT family facts; withheld when `discount_is_ready = 0`
 - `gate`: GATE family checks (`gate_status` PASS/FAIL)
 
 Read fields from `payload` (`payload:metric_name`, `payload:pct`,
-`payload:amount_value`, `payload:avg_value`, …).
+`payload:amount_value`, `payload:avg_value`, `payload:city_bucket`, …).
 
 Never run ride-level SQL in the automation.
 
@@ -73,9 +68,11 @@ If `payload:discount_is_ready = 0`:
 Follow `automations/SLACK_MESSAGE_TEMPLATE.md`.
 
 From `output_kind=digest`, `metric_family=CHANNEL`, render the seven existing
-fare tables unchanged. Append the discount block only when
-`discount_is_ready = 1`, using the exact DISCOUNT `metric_name` map in the
-Slack template (`cap_bound_total__net_shock`, etc.).
+fare tables unchanged (city columns from `city_bucket`). Append the discount
+block only when `discount_is_ready = 1`, using the exact DISCOUNT `metric_name`
+map in the Slack template (`cap_bound_total__net_shock`, etc.).
+
+Post **SA first**, then **JO** (separate webhook payloads).
 
 ## Step 3 — canvas
 
@@ -101,9 +98,10 @@ For canvas segment rows, use:
 
 ## Hard constraints
 
-- Existing automation only
+- Existing automation only — **Pricing KPI Alerts Slack**
 - One Snowflake query: `sql/priceshocks_daily_digest_v2.sql`
 - Never log secrets
 - Never recompute ride-level fare logic
 - Never sum SAR with JOD
 - Never use `PROMOTIONENGINE.DISCOUNTAMOUNT` as expected quote discount
+- Never replace `fare_diff` headline tables with `net_fare_diff`

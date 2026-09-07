@@ -1,10 +1,12 @@
-# Pulsar daily fare-integrity report (Cloud Automation v1 — active until BI cutover)
+# Pulsar daily fare-integrity report (Cloud Automation v1 — SUPERSEDED)
+
+**Superseded 2026-09-07.** Use `automations/DAILY_SLACK_INSTRUCTIONS_V2.md` and
+`sql/priceshocks_daily_digest_v2.sql`. Kept for history only.
 
 **Use existing automation only** (Pricing KPI Alerts Slack). Do not create a new one.
 
-This is the current paste-ready v1 instruction file. Keep it active until BI
-deploys `JEENY_PROD.RIDE.PRICESHOCKDISCOUNTS`. For the post-deployment cutover,
-use `automations/DAILY_SLACK_INSTRUCTIONS_V2.md`.
+This was the v1 instruction file before BI deployed the full rebuild
+`sql/bi_priceshocks_daily.sql` into `JEENY_PROD.RIDE.PRICESHOCKS`.
 
 Repo: `muhammad-hamza-jeenyme/Daily_Pricing_KPIs` @ `main`.
 

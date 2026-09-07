@@ -1,7 +1,6 @@
 # Slack channel message template (Pulsar — fare tables + discount exposure)
 
-**Data source:** `JEENY_PROD.RIDE.PRICESHOCKS` +
-`JEENY_PROD.RIDE.PRICESHOCKDISCOUNTS` via
+**Data source:** `JEENY_PROD.RIDE.PRICESHOCKS` via
 `sql/priceshocks_daily_digest_v2.sql`. Do not recompute ride-level fares in the
 agent.
 

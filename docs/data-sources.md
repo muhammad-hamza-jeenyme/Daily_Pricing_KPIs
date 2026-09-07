@@ -1,14 +1,14 @@
 # Data sources — Snowflake
 
-Status: updated 2026-09-02 — v2 adds DISCOUNT/GATE into `RIDE.PRICESHOCKS`.
+Status: updated 2026-09-07 — v2 active on full `PRICESHOCKS` rebuild.
 
 ## Runtime
 
 - Agent: Cursor Cloud Agent (**11:00 AM PKT**)
 - Access: Snowflake MCP `sql_exec_tool`
 - **Primary (daily):** `JEENY_PROD.RIDE.PRICESHOCKS`
-- **v1 consumer:** `sql/priceshocks_daily_digest.sql`
-- **v2 consumer after DISCOUNT/GATE deploy:** `sql/priceshocks_daily_digest_v2.sql`
+- **BI rebuild query:** `sql/bi_priceshocks_daily.sql` (delete + insert)
+- **Active consumer:** `sql/priceshocks_daily_digest_v2.sql`
 - Specs: `docs/priceshocks-table.md` and
   `docs/price-shock-discounts-bi-handoff.md`
 - Spillover logic (baked into BI table): `docs/payment-spillover-price-shocks.md`
@@ -17,7 +17,7 @@ Status: updated 2026-09-02 — v2 adds DISCOUNT/GATE into `RIDE.PRICESHOCKS`.
 
 | Object | Role |
 |--------|------|
-| **`JEENY_PROD.RIDE.PRICESHOCKS`** | **Daily digest source** — CHANNEL / SCENARIO / CAUSE_MIX, plus DISCOUNT / GATE after BI extension |
+| **`JEENY_PROD.RIDE.PRICESHOCKS`** | **Daily digest source** — CHANNEL / SCENARIO / CAUSE_MIX / DISCOUNT / GATE |
 | `JEENY_PROD.RIDE.DETAILS` | Boarded rides (upstream of BI table / debug) |
 | `JEENY_PROD.RIDE.UPFRONT` | Scenario, ORIG estimate, variance caps (upstream / debug) |
 | `JEENY_PROD.RIDE.RECEIPTS` | Final totals, waiting, cancel, discount (upstream / debug) |
